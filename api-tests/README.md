@@ -40,14 +40,14 @@ SPRING_PROFILES_ACTIVE= ./gradlew :onboarding-server:bootRun   # no profile: emp
 
 ## Bruno
 
-Open the `bruno/` folder as a collection in the Bruno app and pick an environment. Or use the CLI from inside
-`bruno/`:
+Open the `bruno/` folder as a collection in the Bruno app (**Open Collection**) and pick an environment. Or
+use the Bruno CLI (`bru`, package `@usebruno/cli`) from inside `bruno/`:
 
 ```bash
 cd api-tests/bruno
-npx @usebruno/cli@4.2.1 run --env local-dev                      # all 11 requests
-npx @usebruno/cli@4.2.1 run --env local-default                  # requests 10–11 are skipped
-npx @usebruno/cli@4.2.1 run --env local-dev --reporter-junit build/bruno-junit.xml   # for CI
+bru run --env local-dev                                      # all 11 requests
+bru run --env local-default                                  # requests 10–11 are skipped
+bru run --env local-dev --reporter-junit build/bruno-junit.xml   # JUnit XML for CI
 ```
 
 Environments (`bruno/environments/`) match the server's Spring profiles:
@@ -59,6 +59,8 @@ Environments (`bruno/environments/`) match the server's Spring profiles:
 | `local-dev-8081` | `java -jar … --spring.profiles.active=dev --server.port=8081` | `http://localhost:8081` | run |
 
 To add an environment for another server, copy one of these files and change `baseUrl` and `demoData`.
+Environment files can't contain comments: the Bruno parser rejects a `#` line there. Document an
+environment in the table above instead.
 Never commit secrets: Bruno reads them from a local, git-ignored `.env` file via `{{process.env.NAME}}`.
 
 ## SoapUI
@@ -80,5 +82,8 @@ Headless, e.g. in CI, with the test runner shipped with SoapUI (needs Java 17+):
 
 - **SoapUI:** run with the SoapUI 5.10.0 test runner against the server with the `dev` profile. Result:
   1 test case, 9 steps, 24 assertions, 0 failed.
-- **Bruno:** every request's expectations were checked against the running server with `curl`, but the
-  collection has not yet been run with the Bruno CLI itself. Do that once with the commands above.
+- **Bruno:** run with Bruno CLI 4.3.0. Results:
+  - `local-dev` against the server with the `dev` profile: 11/11 requests, 8/8 tests, 22/22 assertions,
+    and the same again on a second run against the same server;
+  - `local-default` against a server without a profile: 9 passed, 2 demo requests skipped, 17/17 assertions;
+  - `local-dev` against that server without demo data fails as it should: the two demo checks fail.

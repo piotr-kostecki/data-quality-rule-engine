@@ -753,7 +753,7 @@ Where a runner can't install Nix, the same toolchain comes from a CI image built
 |---|---|
 | Manual | [`http/requests.http`](http/requests.http), for IntelliJ / VS Code |
 | SoapUI | `api-tests/soapui`: one suite with 9 steps and 24 assertions covering the happy path and the error contract (`201`/`422`/`404`/`400`, problem details, `Location`). Passed with the SoapUI 5.10.0 test runner. |
-| Bruno | `api-tests/bruno`: the same flow plus two checks that need demo data, in plain-text files. Environments `local-dev`, `local-default` and `local-dev-8081` match the server's Spring profiles. Expectations were checked with `curl`; a run with the Bruno CLI is still to be done. |
+| Bruno | `api-tests/bruno`: the same flow plus two checks that need demo data, in plain-text files. Environments `local-dev`, `local-default` and `local-dev-8081` match the server's Spring profiles. Passed with Bruno CLI 4.3.0 (22/22 assertions with demo data; demo checks skipped without it). |
 
 Both suites are repeatable: each run onboards its own partner with a random name, and checks that need demo
 data are skipped when an environment has none.
