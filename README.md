@@ -36,8 +36,9 @@ JUnit 5 · AssertJ · Mockito · ArchUnit · JSpecify · springdoc-openapi · SL
 | Module | What | Depends on | Framework? | Published? |
 |---|---|---|---|---|
 | [`partner-quality`](partner-quality) | **Library**: rules, rule engine, duplicate detection | JSpecify only | no | yes: jar, sources, javadoc, test fixtures |
-| `onboarding-application` | **Hexagon**: domain entity, incoming/outgoing **ports**, use-case service | `partner-quality` | no | no |
-| `onboarding-server` | **Adapters** (REST in; persistence and events out) and Spring wiring | `onboarding-application` | Spring Boot | runnable jar |
+| [`onboarding-application`](onboarding-application) | **Hexagon**: domain entity, incoming/outgoing **ports**, use-case service | `partner-quality` | no | no |
+| [`onboarding-server`](onboarding-server) | **Adapters** (REST in; persistence and events out) and Spring wiring | `onboarding-application` | Spring Boot | runnable jar |
+| [`build-logic`](build-logic) | **Build**: Gradle convention plugins shared by the modules (included build, not shipped) | version catalog | — | no |
 
 Dependencies only point inward, and two mechanisms enforce that:
 
@@ -257,6 +258,12 @@ run everything again.
 
 ## Further documentation
 
+- **Module READMEs**: [`partner-quality`](partner-quality/README.md) (library, from a consumer's point of
+  view) · [`onboarding-application`](onboarding-application/README.md) (hexagon, ports, use cases) ·
+  [`onboarding-server`](onboarding-server/README.md) (adapters, API, configuration, logging) ·
+  [`build-logic`](build-logic/README.md) (convention plugins).
+- **[DESIGN.md](DESIGN.md)**: design of the data-quality rule engine for
+  [raw/REQUIREMENT.md](raw/REQUIREMENT.md).
+- **[docs/DEV_ENVIRONMENT.md](docs/DEV_ENVIRONMENT.md)**: Nix dev shell, editor setup and formatting.
 - **[docs/LIBRARY_GUIDELINES.md](docs/LIBRARY_GUIDELINES.md)**: how to build a scalable, durable Java
   library, what `partner-quality` already does and what to add next.
-- **[partner-quality/README.md](partner-quality/README.md)**: the library from a consumer's point of view.

@@ -1,7 +1,10 @@
 # partner-quality
 
 Business-partner **data quality rules** and **duplicate detection** as a plain Java 21 library. It has no
-framework dependencies and no I/O; its only runtime dependency is JSpecify (null-safety annotations).
+framework dependencies, no I/O and no logging; its only runtime dependency is JSpecify (null-safety
+annotations). Outcomes are returned as values, so the host decides what to log.
+
+[← Back to the main README](../README.md)
 
 ```groovy
 dependencies {
@@ -84,3 +87,20 @@ same country, same IBAN, a search-index query) so it scales to large datasets.
   constants may be added in minor versions, so don't `switch` over it exhaustively without a default.
 
 The principles behind these guarantees are in [docs/LIBRARY_GUIDELINES.md](../docs/LIBRARY_GUIDELINES.md).
+
+## Tests
+
+```bash
+./gradlew :partner-quality:test
+```
+
+| Test | What it proves |
+|---|---|
+| `VatIdRuleTest`, `IbanRuleTest`, `AddressRulesTest` | rules against reference vectors (valid and invalid VAT IDs, IBANs, postal codes) |
+| `DataQualityEngineTest` | every rule runs, custom rules extend the built-in ones, a crashing rule becomes a `RULE_FAILURE` error |
+| `DuplicateDetectorTest`, `MatchingPolicyTest` | match reasons, blocking vs possible duplicates, threshold validation and effect |
+| `PartnerDataTest` | input normalization |
+| `JaroWinklerTest`, `NameNormalizerTest` | the internal text algorithms |
+
+The tests use only the public API, except the two `internal` algorithm tests. Sample data lives in the
+published test fixtures (`PartnerFixtures`). Reports are in `build/reports/tests/test/index.html`.
