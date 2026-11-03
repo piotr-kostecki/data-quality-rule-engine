@@ -36,10 +36,17 @@ spring-boot-starter-log4j2 = { module = "org.springframework.boot:spring-boot-st
 # JSON log layouts (Logstash, ECS, GELF); version from the Log4j BOM that Spring Boot imports
 log4j-layout-template-json = { module = "org.apache.logging.log4j:log4j-layout-template-json" }
 spring-boot-starter-test = { module = "org.springframework.boot:spring-boot-starter-test" }
+# Observability: Micrometer with the OpenTelemetry bridge; versions from the Spring Boot BOM
+micrometer-tracing-bridge-otel = { module = "io.micrometer:micrometer-tracing-bridge-otel" }
+opentelemetry-exporter-otlp = { module = "io.opentelemetry:opentelemetry-exporter-otlp" }
+micrometer-registry-otlp = { module = "io.micrometer:micrometer-registry-otlp" }
+micrometer-registry-prometheus = { module = "io.micrometer:micrometer-registry-prometheus" }
 springdoc-openapi-webmvc-ui = { module = "org.springdoc:springdoc-openapi-starter-webmvc-ui", version.ref = "springdoc" }
 
 [bundles]
 spring-web-server = ["spring-boot-starter-web", "spring-boot-starter-actuator", "springdoc-openapi-webmvc-ui"]
+# Traces and metrics over OTLP (OpenTelemetry), plus a Prometheus scrape endpoint
+observability = ["micrometer-tracing-bridge-otel", "opentelemetry-exporter-otlp", "micrometer-registry-otlp", "micrometer-registry-prometheus"]
 
 [plugins]
 spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }

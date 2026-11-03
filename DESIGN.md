@@ -436,6 +436,14 @@ OpenTelemetry metrics and traces.
 
 ## 14. Observability and rule profiling (iteration 2)
 
+**Already in place (in the HTTP host, `onboarding-server`, ADR-0011):**
+- Micrometer with the OpenTelemetry bridge, and W3C trace propagation;
+- trace and span ids in the logs;
+- OTLP/HTTP export of traces and metrics with the `otel` profile;
+- `/actuator/prometheus`, and Kubernetes liveness and readiness probes.
+
+What follows is for the rule engine itself.
+
 **Instrumentation.** OpenTracing has been superseded by **OpenTelemetry (OTel)**, so OTel is the
 standard to use. A `dq-engine-otel` module implements `RunListener` against the OTel **API** only. The
 host configures the SDK and exporters, and core stays dependency-free.

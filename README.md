@@ -50,6 +50,7 @@ requests are in [http/requests.http](http/requests.http), and functional test su
 | use another port | add `--server.port=8081` (jar), or `--args='--server.port=8081'` (bootRun) |
 | start without demo data | run without a profile. The Nix shell exports `SPRING_PROFILES_ACTIVE=dev`, so clear it there: `SPRING_PROFILES_ACTIVE= ./gradlew :onboarding-server:bootRun` |
 | get JSON logs (Logstash format) | profiles `dev,json-logs` |
+| export traces and metrics (OpenTelemetry) | profiles `dev,otel`; endpoint from `OTEL_EXPORTER_OTLP_ENDPOINT` (default `http://localhost:4318`) |
 
 Profiles, logging and the full API are described further down. The rule engine from
 [raw/REQUIREMENT.md](raw/REQUIREMENT.md) is a library for now and has no HTTP server of its own yet (see below).
@@ -76,7 +77,7 @@ The task's scenario (3 records × 3 rules) and its fault-isolation case pass as 
 what comes next is in [DESIGN.md, implementation status](DESIGN.md#implementation-status-iteration-1-first-slice).
 
 **Stack:** Java 21 · Spring Boot 3.5 · Gradle 8.14 (Groovy DSL, version catalog, convention plugins) ·
-JUnit 5 · AssertJ · Mockito · ArchUnit · JSpecify · springdoc-openapi · SLF4J + Log4j2 · Lombok · Nix flake + direnv.
+JUnit 5 · AssertJ · Mockito · ArchUnit · JSpecify · springdoc-openapi · SLF4J + Log4j2 · Micrometer + OpenTelemetry (OTLP) · Lombok · Nix flake + direnv.
 
 ## Onboarding service modules
 
@@ -143,7 +144,7 @@ See [ADR-0006](docs/adr/0006-nix-dev-environment.md).
 
 ```bash
 direnv allow                 # first time only; loads JDK 21 + Gradle from flake.nix
-./gradlew build              # compiles, tests (140) and packages all modules
+./gradlew build              # compiles, tests (146) and packages all modules
 ./gradlew bootRun            # runs onboarding-server with the dev profile (set by the shell)
 ./gradlew :partner-quality:publishToMavenLocal   # installs the library into ~/.m2
 ```
@@ -181,6 +182,7 @@ Details in [docs/DEV_ENVIRONMENT.md](docs/DEV_ENVIRONMENT.md#editor-setup-and-fo
 | `dev` | `SPRING_PROFILES_ACTIVE=dev`, exported by the Nix shell | includes `demo`; DEBUG logs; indented JSON; all actuator endpoints; health details |
 | `demo` | `dev`, or on its own | seeds three fictional partners (DE, PL, CH) |
 | `json-logs` | added explicitly, e.g. `SPRING_PROFILES_ACTIVE=dev,json-logs` | logs as one JSON object per line in the Logstash event format (see below) |
+| `otel` | added explicitly, e.g. `SPRING_PROFILES_ACTIVE=dev,otel` | exports traces and metrics over OTLP/HTTP to `OTEL_EXPORTER_OTLP_ENDPOINT` (default `http://localhost:4318`) |
 
 Tests never inherit the shell's profile: the server's `test` task removes `SPRING_PROFILES_ACTIVE`.
 
@@ -205,7 +207,9 @@ See [ADR-0009](docs/adr/0009-logging-slf4j-log4j2.md).
 |---|---|
 | http://localhost:8080/swagger-ui.html | Interactive API docs |
 | http://localhost:8080/v3/api-docs | OpenAPI JSON |
-| http://localhost:8080/actuator/health | Health check |
+| http://localhost:8080/actuator/health | Health check (`/liveness`, `/readiness` for Kubernetes probes) |
+| http://localhost:8080/actuator/info | Build, Java and OS information |
+| http://localhost:8080/actuator/prometheus | Metrics in Prometheus format |
 
 [http/requests.http](http/requests.http) has ready-made requests for IntelliJ, or for VS Code with the REST Client extension.
 
@@ -298,6 +302,7 @@ curl -s -X POST localhost:8080/api/v1/business-partners -H 'Content-Type: applic
 | onboarding-server | web slice | `BusinessPartnerControllerTest` (in-ports mocked) | MVC only | HTTP contract per outcome |
 | onboarding-server | integration | `OnboardingApiIntegrationTest` | full | the whole flow, OpenAPI, actuator |
 | onboarding-server | integration | `MatchingThresholdsConfigurationTest` | full | duplicate thresholds come from `onboarding.matching.*`; invalid values stop the start-up |
+| onboarding-server | integration | `ObservabilityTest`, `OtlpExportTest` | full | probes, info, Prometheus metrics, W3C trace continuation with the trace id in the log context; spans exported over OTLP to a stand-in collector |
 | onboarding-server | integration | `DemoProfileTest` | full | the `demo` seed data that the README examples and `http/requests.http` rely on |
 | onboarding-server | architecture | `HexagonalArchitectureTest` | no | onion layering and port rules |
 
@@ -328,6 +333,7 @@ run everything again.
 | [0008](docs/adr/0008-gradle-groovy-version-catalog.md) | Groovy DSL, version catalog, convention plugins in build-logic |
 | [0009](docs/adr/0009-logging-slf4j-log4j2.md) | SLF4J API with Log4j2; JSON (Logstash format) output via a profile |
 | [0010](docs/adr/0010-lombok.md) | Lombok (`@RequiredArgsConstructor`, `@Slf4j`) in application and server code, not in published libraries |
+| [0011](docs/adr/0011-observability-opentelemetry-actuator.md) | Actuator probes and info, Micrometer with the OpenTelemetry bridge, OTLP export via the `otel` profile, Prometheus endpoint |
 
 ## Further documentation
 

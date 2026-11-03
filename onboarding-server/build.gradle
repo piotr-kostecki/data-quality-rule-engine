@@ -12,6 +12,8 @@ dependencies {
 
     implementation project(':onboarding-application')
     implementation libs.bundles.spring.web.server
+    // Tracing (W3C trace context, trace ids in logs) and metrics, exported over OTLP with the otel profile
+    implementation libs.bundles.observability
     // Logging: code uses the SLF4J API only; Log4j2 is the backend, configured in log4j2-spring.xml
     implementation libs.spring.boot.starter.log4j2
     runtimeOnly libs.log4j.layout.template.json
@@ -19,6 +21,13 @@ dependencies {
     testImplementation libs.spring.boot.starter.test
     testImplementation libs.archunit.junit5
     testImplementation testFixtures(project(':partner-quality'))
+}
+
+springBoot {
+    // META-INF/build-info.properties for /actuator/info; without the build time, so jars stay reproducible
+    buildInfo {
+        excludes = ['time']
+    }
 }
 
 configurations.configureEach {

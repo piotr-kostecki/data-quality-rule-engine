@@ -11,6 +11,9 @@ spring:
       indent-output: true   # readable JSON in curl without piping through jq
 
 management:
+  tracing:
+    sampling:
+      probability: 1.0      # trace every request locally
   endpoints:
     web:
       exposure:

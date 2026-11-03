@@ -9,10 +9,12 @@
   - profile "json-logs": one JSON object per line in the Logstash event format (LogstashJsonEventLayoutV1),
     ready for a log shipper (Filebeat, Fluent Bit) or Logstash's json_lines codec.
     For Elastic Common Schema instead, use eventTemplateUri="classpath:EcsLayout.json".
+    Trace correlation: traceId and spanId are in the event's "mdc" object.
 -->
 <Configuration status="WARN">
     <Properties>
-        <Property name="PATTERN">%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%15.15t] %-40.40c{1.} : %m%n%throwable</Property>
+        <!-- [traceId,spanId] appears while a request is traced (Micrometer Tracing puts both into the MDC) -->
+        <Property name="PATTERN">%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%15.15t] %notEmpty{[%X{traceId},%X{spanId}] }%-40.40c{1.} : %m%n%throwable</Property>
     </Properties>
 
     <Appenders>
