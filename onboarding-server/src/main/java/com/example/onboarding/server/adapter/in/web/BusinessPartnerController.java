@@ -15,6 +15,7 @@ import com.example.onboarding.server.adapter.in.web.dto.PartnerRequest;
 import com.example.onboarding.server.adapter.in.web.dto.PartnerResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -34,6 +35,7 @@ import java.util.UUID;
  * It depends on the use-case interfaces only, never on the service that implements them.
  */
 @RestController
+@RequiredArgsConstructor
 @RequestMapping("/api/v1/business-partners")
 @Tag(name = "Business partners", description = "Onboard customers and suppliers with data quality and duplicate checks")
 public class BusinessPartnerController {
@@ -41,13 +43,6 @@ public class BusinessPartnerController {
     private final OnboardPartnerUseCase onboardPartner;
     private final CheckPartnerUseCase checkPartner;
     private final FindPartnersQuery findPartners;
-
-    public BusinessPartnerController(
-            OnboardPartnerUseCase onboardPartner, CheckPartnerUseCase checkPartner, FindPartnersQuery findPartners) {
-        this.onboardPartner = onboardPartner;
-        this.checkPartner = checkPartner;
-        this.findPartners = findPartners;
-    }
 
     @PostMapping("/checks")
     @Operation(summary = "Dry run: report rule violations and duplicate candidates without storing anything")

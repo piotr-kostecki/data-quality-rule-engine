@@ -96,3 +96,6 @@ to trust it (`:trust`). It configures jdtls:
 
 It also shows a ruler at column 121 for Java and Groovy, and turns off format-on-save for Markdown.
 Start Neovim from inside the dev shell, so `JAVA_HOME` points at JDK 21.
+
+**Lombok:** the application and server modules use Lombok. LazyVim's Java extra starts jdtls with the
+Lombok agent automatically. In IntelliJ, enable annotation processing (the Lombok plugin is bundled).

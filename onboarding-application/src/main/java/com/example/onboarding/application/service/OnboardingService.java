@@ -20,6 +20,7 @@ import com.example.partnerquality.matching.DuplicateDetector;
 import com.example.partnerquality.matching.Match;
 import com.example.partnerquality.validation.DataQualityEngine;
 import com.example.partnerquality.validation.ValidationReport;
+import lombok.RequiredArgsConstructor;
 
 import java.time.Clock;
 import java.util.LinkedHashMap;
@@ -32,6 +33,7 @@ import java.util.Optional;
  * Implements the incoming ports. Orchestrates the partner-quality library and the outgoing ports; contains
  * no HTTP, storage or framework code.
  */
+@RequiredArgsConstructor
 public class OnboardingService implements OnboardPartnerUseCase, CheckPartnerUseCase, FindPartnersQuery {
 
     private final DataQualityEngine qualityEngine;
@@ -41,20 +43,6 @@ public class OnboardingService implements OnboardPartnerUseCase, CheckPartnerUse
     private final PublishPartnerEventPort publishPartnerEventPort;
     private final Clock clock;
 
-    public OnboardingService(
-            DataQualityEngine qualityEngine,
-            DuplicateDetector duplicateDetector,
-            LoadPartnerPort loadPartnerPort,
-            SavePartnerPort savePartnerPort,
-            PublishPartnerEventPort publishPartnerEventPort,
-            Clock clock) {
-        this.qualityEngine = qualityEngine;
-        this.duplicateDetector = duplicateDetector;
-        this.loadPartnerPort = loadPartnerPort;
-        this.savePartnerPort = savePartnerPort;
-        this.publishPartnerEventPort = publishPartnerEventPort;
-        this.clock = clock;
-    }
 
     @Override
     public QualityCheck check(PartnerData data) {

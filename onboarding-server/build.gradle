@@ -1,5 +1,6 @@
 plugins {
     id 'onboarding.java-conventions'
+    id 'onboarding.lombok-conventions'
     alias(libs.plugins.spring.boot)
 }
 

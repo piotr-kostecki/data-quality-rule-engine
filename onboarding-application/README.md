@@ -32,7 +32,8 @@ interface, so callers handle every outcome with an exhaustive `switch`.
 | [`partner-quality`](../partner-quality) | `api` | its types (`PartnerData`, `ValidationReport`, `Match`) appear in this module's port signatures |
 | `partner-quality` test fixtures | test | valid sample partners |
 
-There are no other runtime dependencies and no logging. The adapters in
+There are no other runtime dependencies and no logging. Lombok (`@RequiredArgsConstructor`) is used at
+compile time only ([ADR-0010](../docs/adr/0010-lombok.md)). The adapters in
 [`onboarding-server`](../onboarding-server) implement the outgoing ports and call the incoming ones.
 
 ## Rules for changes

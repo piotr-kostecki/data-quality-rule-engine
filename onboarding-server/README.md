@@ -68,7 +68,8 @@ default, and `LogstashJsonEventLayoutV1` JSON on stdout with the `json-logs` pro
 ## Dependencies
 
 `onboarding-application` (and through it `partner-quality`), plus the Spring Boot web and actuator
-starters, springdoc-openapi and Log4j2. Spring versions come from the Spring Boot BOM, which is imported
+starters, springdoc-openapi and Log4j2. Lombok (`@RequiredArgsConstructor`, `@Slf4j`) is used at compile
+time only ([ADR-0010](../docs/adr/0010-lombok.md)). Spring versions come from the Spring Boot BOM, which is imported
 with Gradle's `platform()`. All other versions come from
 [`gradle/libs.versions.toml`](../gradle/libs.versions.toml).
 

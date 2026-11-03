@@ -1,16 +1,14 @@
 package com.example.onboarding.server.adapter.out.event;
 
 import com.example.onboarding.application.domain.BusinessPartnerOnboarded;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
-/** Stand-in for a downstream consumer of the event (search index, SAP sync). Here it only logs. */
+/** Stand-in for a downstream consumer of the event (search index, ERP sync). Here it only logs. */
 @Component
+@Slf4j
 public class OnboardingAuditListener {
-
-    private static final Logger log = LoggerFactory.getLogger(OnboardingAuditListener.class);
 
     @EventListener
     public void on(BusinessPartnerOnboarded event) {

@@ -1,0 +1,15 @@
+// Lombok for application and server code. It is compile-time only, so nothing reaches the runtime classpath.
+// Published libraries don't apply it: their public API is records and hand-written, documented code.
+plugins {
+    id 'java'
+}
+
+def libs = versionCatalogs.named('libs')
+def lombok = libs.findLibrary('lombok').get()
+
+dependencies {
+    compileOnly lombok
+    annotationProcessor lombok
+    testCompileOnly lombok
+    testAnnotationProcessor lombok
+}

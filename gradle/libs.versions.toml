@@ -8,6 +8,8 @@ springdoc = "2.8.17"
 jspecify = "1.0.0"
 # Kept equal to the versions managed by the Spring Boot BOM, so the library and the server test with the same JUnit.
 junit = "5.12.2"
+# Kept equal to the version managed by the Spring Boot BOM
+lombok = "1.18.46"
 assertj = "3.27.7"
 archunit = "1.4.2"
 
@@ -17,6 +19,7 @@ jspecify = { module = "org.jspecify:jspecify", version.ref = "jspecify" }
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+lombok = { module = "org.projectlombok:lombok", version.ref = "lombok" }
 assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }
 archunit-junit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref = "archunit" }
 

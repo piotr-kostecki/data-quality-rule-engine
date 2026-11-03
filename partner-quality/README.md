@@ -2,7 +2,8 @@
 
 Business-partner **data quality rules** and **duplicate detection** as a plain Java 21 library. It has no
 framework dependencies, no I/O and no logging; its only runtime dependency is JSpecify (null-safety
-annotations). Outcomes are returned as values, so the host decides what to log.
+annotations). Outcomes are returned as values, so the host decides what to log. It doesn't use Lombok:
+the API is records and documented, hand-written code.
 
 [← Back to the main README](../README.md)
 

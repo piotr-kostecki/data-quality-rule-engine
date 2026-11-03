@@ -12,7 +12,8 @@ of the product.
 | Plugin id | Applied by | What it configures |
 |---|---|---|
 | `onboarding.java-conventions` | every module | Java toolchain (version from the catalog), UTF-8, `-parameters`, `-Xlint:all`; JUnit 5 + AssertJ; test logging with full stack traces and a one-line summary per module |
-| `onboarding.library-conventions` | published libraries (`partner-quality`) | everything above, plus `java-library`, `-Werror`, javadoc lint, sources and javadoc jars, reproducible jars, a Maven publication with POM and licence |
+| `onboarding.lombok-conventions` | `onboarding-application`, `onboarding-server` | Lombok as `compileOnly` + `annotationProcessor` for main and test code; settings in the root `lombok.config` ([ADR-0010](../docs/adr/0010-lombok.md)) |
+| `onboarding.library-conventions` | published libraries (`partner-quality`) | everything in `onboarding.java-conventions`, plus `java-library`, `-Werror`, javadoc lint, sources and javadoc jars, reproducible jars, a Maven publication with POM and licence |
 
 Usage in a module:
 

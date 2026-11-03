@@ -4,6 +4,7 @@ import com.example.onboarding.application.port.in.OnboardPartnerCommand;
 import com.example.onboarding.application.port.in.OnboardPartnerUseCase;
 import com.example.partnerquality.Address;
 import com.example.partnerquality.PartnerData;
+import lombok.RequiredArgsConstructor;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Profile;
@@ -12,13 +13,10 @@ import org.springframework.stereotype.Component;
 /** Seeds a few fictional partners when started with the {@code demo} profile, through the normal use case. */
 @Component
 @Profile("demo")
+@RequiredArgsConstructor
 public class DemoDataLoader implements ApplicationRunner {
 
     private final OnboardPartnerUseCase onboardPartner;
-
-    public DemoDataLoader(OnboardPartnerUseCase onboardPartner) {
-        this.onboardPartner = onboardPartner;
-    }
 
     @Override
     public void run(ApplicationArguments args) {

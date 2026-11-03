@@ -8,7 +8,7 @@ Requirements for the data-quality rule engine are in [raw/REQUIREMENT.md](raw/RE
 its design is in [DESIGN.md](DESIGN.md).
 
 **Stack:** Java 21 · Spring Boot 3.5 · Gradle 8.14 (Groovy DSL, version catalog, convention plugins) ·
-JUnit 5 · AssertJ · Mockito · ArchUnit · JSpecify · springdoc-openapi · SLF4J + Log4j2 · Nix flake + direnv.
+JUnit 5 · AssertJ · Mockito · ArchUnit · JSpecify · springdoc-openapi · SLF4J + Log4j2 · Lombok · Nix flake + direnv.
 
 ## Three modules
 
@@ -255,6 +255,7 @@ run everything again.
 | [0007](docs/adr/0007-modules-library-application-server.md) | Three Gradle modules: library, application (hexagon), server (adapters) |
 | [0008](docs/adr/0008-gradle-groovy-version-catalog.md) | Groovy DSL, version catalog, convention plugins in build-logic |
 | [0009](docs/adr/0009-logging-slf4j-log4j2.md) | SLF4J API with Log4j2; JSON (Logstash format) output via a profile |
+| [0010](docs/adr/0010-lombok.md) | Lombok (`@RequiredArgsConstructor`, `@Slf4j`) in application and server code, not in published libraries |
 
 ## Further documentation
 
