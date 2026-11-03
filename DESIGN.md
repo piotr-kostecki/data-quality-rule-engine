@@ -412,7 +412,7 @@ host configures the SDK and exporters, and core stays dependency-free.
 |---|---|---|
 | Traces | one span per run, one child span per batch, per-record spans **only when sampled** or at `TRACE` | a span per rule × record would be 30M spans for 1M records × 30 rules. Never do that by default. |
 | Metrics | records processed, results by decision and severity, errors by kind and rule, skips, batch duration, `dq.rule.evaluation.duration` histogram per `rule.id` | label cardinality: `rule.id` is bounded by catalog size. **Never** use a record id as a label. |
-| Logs | run start and end with summary, catalog load problems, circuit-breaker trips | no field values unless masked |
+| Logs | run start and end with summary, catalog load problems, circuit-breaker trips. The host logs through SLF4J with Log4j2, and the `json-logs` profile writes Logstash JSON to stdout (ADR-0009); the core library has no logging dependency | no field values unless masked |
 
 **Stack:** OTel SDK → OTel Collector → **Prometheus** (metrics), **Tempo or Jaeger** (traces),
 **Loki** (logs and event log) → **Grafana** dashboards and alerts. The Spring Boot example uses

@@ -8,7 +8,7 @@ Requirements for the data-quality rule engine are in [raw/REQUIREMENT.md](raw/RE
 its design is in [DESIGN.md](DESIGN.md).
 
 **Stack:** Java 21 · Spring Boot 3.5 · Gradle 8.14 (Groovy DSL, version catalog, convention plugins) ·
-JUnit 5 · AssertJ · Mockito · ArchUnit · JSpecify · springdoc-openapi · Nix flake + direnv.
+JUnit 5 · AssertJ · Mockito · ArchUnit · JSpecify · springdoc-openapi · SLF4J + Log4j2 · Nix flake + direnv.
 
 ## Three modules
 
@@ -111,8 +111,24 @@ Details in [docs/DEV_ENVIRONMENT.md](docs/DEV_ENVIRONMENT.md#editor-setup-and-fo
 | *(none)* | default outside the Nix shell | empty in-memory store, INFO logs, actuator `health,info,metrics` |
 | `dev` | `SPRING_PROFILES_ACTIVE=dev`, exported by the Nix shell | includes `demo`; DEBUG logs; indented JSON; all actuator endpoints; health details |
 | `demo` | `dev`, or on its own | seeds three fictional partners (DE, PL, CH) |
+| `json-logs` | added explicitly, e.g. `SPRING_PROFILES_ACTIVE=dev,json-logs` | logs as one JSON object per line in the Logstash event format (see below) |
 
 Tests never inherit the shell's profile: the server's `test` task removes `SPRING_PROFILES_ACTIVE`.
+
+### Logging
+
+Code logs through the SLF4J API, and Log4j2 is the backend. The output is configured in
+[`log4j2-spring.xml`](onboarding-server/src/main/resources/log4j2-spring.xml), and levels in `application*.yml`. Logs always
+go to stdout. By default they are human-readable lines. With the `json-logs` profile they are JSON, ready
+for a log shipper or Logstash:
+
+```json
+{"@version":1,"@timestamp":"2026-11-03T05:22:52.739+0100","level":"INFO","service":"partner-onboarding",
+ "logger_name":"com.example.onboarding.server.adapter.out.event.OnboardingAuditListener","thread_name":"main",
+ "message":"Business partner onboarded: id=27d8f152-… name='Acme Chemicals GmbH' country=DE"}
+```
+
+See [ADR-0009](docs/adr/0009-logging-slf4j-log4j2.md).
 
 ### Where to look once it runs
 
@@ -237,6 +253,7 @@ run everything again.
 | [0006](docs/adr/0006-nix-dev-environment.md) | Reproducible toolchain with a Nix flake and direnv |
 | [0007](docs/adr/0007-modules-library-application-server.md) | Three Gradle modules: library, application (hexagon), server (adapters) |
 | [0008](docs/adr/0008-gradle-groovy-version-catalog.md) | Groovy DSL, version catalog, convention plugins in build-logic |
+| [0009](docs/adr/0009-logging-slf4j-log4j2.md) | SLF4J API with Log4j2; JSON (Logstash format) output via a profile |
 
 ## Further documentation
 

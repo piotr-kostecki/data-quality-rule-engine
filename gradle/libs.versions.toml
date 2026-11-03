@@ -23,6 +23,9 @@ archunit-junit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref
 spring-boot-bom = { module = "org.springframework.boot:spring-boot-dependencies", version.ref = "spring-boot" }
 spring-boot-starter-web = { module = "org.springframework.boot:spring-boot-starter-web" }
 spring-boot-starter-actuator = { module = "org.springframework.boot:spring-boot-starter-actuator" }
+spring-boot-starter-log4j2 = { module = "org.springframework.boot:spring-boot-starter-log4j2" }
+# JSON log layouts (Logstash, ECS, GELF); version from the Log4j BOM that Spring Boot imports
+log4j-layout-template-json = { module = "org.apache.logging.log4j:log4j-layout-template-json" }
 spring-boot-starter-test = { module = "org.springframework.boot:spring-boot-starter-test" }
 springdoc-openapi-webmvc-ui = { module = "org.springdoc:springdoc-openapi-starter-webmvc-ui", version.ref = "springdoc" }
 

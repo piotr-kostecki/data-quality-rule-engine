@@ -11,10 +11,18 @@ dependencies {
 
     implementation project(':onboarding-application')
     implementation libs.bundles.spring.web.server
+    // Logging: code uses the SLF4J API only; Log4j2 is the backend, configured in log4j2-spring.xml
+    implementation libs.spring.boot.starter.log4j2
+    runtimeOnly libs.log4j.layout.template.json
 
     testImplementation libs.spring.boot.starter.test
     testImplementation libs.archunit.junit5
     testImplementation testFixtures(project(':partner-quality'))
+}
+
+configurations.configureEach {
+    // Spring Boot starters bring Logback by default; only one SLF4J backend may be on the classpath
+    exclude group: 'org.springframework.boot', module: 'spring-boot-starter-logging'
 }
 
 tasks.withType(Test).configureEach {

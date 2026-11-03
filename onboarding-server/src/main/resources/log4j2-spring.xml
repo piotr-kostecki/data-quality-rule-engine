@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Log4j2 configuration. Spring Boot loads it (the "-spring" suffix enables <SpringProfile> and ${spring:...}).
+  Application code logs through the SLF4J API only, so the backend can change without code changes.
+  Log levels stay in application*.yml (logging.level.*).
+
+  Output, always on the console (stdout), as recommended for containers:
+  - default profile set: human-readable lines
+  - profile "json-logs": one JSON object per line in the Logstash event format (LogstashJsonEventLayoutV1),
+    ready for a log shipper (Filebeat, Fluent Bit) or Logstash's json_lines codec.
+    For Elastic Common Schema instead, use eventTemplateUri="classpath:EcsLayout.json".
+-->
+<Configuration status="WARN">
+    <Properties>
+        <Property name="PATTERN">%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%15.15t] %-40.40c{1.} : %m%n%throwable</Property>
+    </Properties>
+
+    <Appenders>
+        <SpringProfile name="!json-logs">
+            <Console name="Console" target="SYSTEM_OUT">
+                <PatternLayout pattern="${PATTERN}"/>
+            </Console>
+        </SpringProfile>
+        <SpringProfile name="json-logs">
+            <Console name="Console" target="SYSTEM_OUT">
+                <JsonTemplateLayout eventTemplateUri="classpath:LogstashJsonEventLayoutV1.json">
+                    <EventTemplateAdditionalField key="service" value="${spring:spring.application.name}"/>
+                </JsonTemplateLayout>
+            </Console>
+        </SpringProfile>
+    </Appenders>
+
+    <Loggers>
+        <Root level="INFO">
+            <AppenderRef ref="Console"/>
+        </Root>
+    </Loggers>
+</Configuration>
