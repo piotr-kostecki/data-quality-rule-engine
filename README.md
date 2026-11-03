@@ -7,10 +7,31 @@ identifiers).
 Requirements for the data-quality rule engine are in [raw/REQUIREMENT.md](raw/REQUIREMENT.md), and
 its design is in [DESIGN.md](DESIGN.md).
 
+## Data-quality rule engine (first slice)
+
+The rule engine from the requirement is being built in two new modules, next to the onboarding service:
+
+| Module | What | Depends on |
+|---|---|---|
+| [`dq-engine`](dq-engine) | **Library core**: rules with declarative decision mappings, composable rule filters, streaming runs in batches, fault isolation, provenance, run summary | JSpecify only |
+| [`dq-engine-cel`](dq-engine-cel) | **Rule logic as CEL expressions**: compile-time type checking, `present()`, provenance from the syntax tree | `dq-engine`, `dev.cel:cel` |
+
+```java
+Rule vatFormat = Rule.builder("vatFormat").status(RuleStatus.RELEASED)
+        .logic(cel.compile("present(record, 'vatId') && size(record.vatId) >= 9 ? 'ok' : 'bad'"))
+        .mapping(DecisionMapping.when("ok", Decision.VALID).when("bad", Decision.INVALID).withImplicitDefault())
+        .build();
+ValidationReport report = ValidationEngine.builder().catalog(RuleCatalog.of(vatFormat)).build().validate(records);
+```
+
+The task's scenario (3 records × 3 rules) and its fault-isolation case pass as tests
+(`./gradlew :dq-engine-cel:test`). A million-record run streams through on a 64 MB heap. What is built and
+what comes next is in [DESIGN.md, implementation status](DESIGN.md#implementation-status-iteration-1-first-slice).
+
 **Stack:** Java 21 · Spring Boot 3.5 · Gradle 8.14 (Groovy DSL, version catalog, convention plugins) ·
 JUnit 5 · AssertJ · Mockito · ArchUnit · JSpecify · springdoc-openapi · SLF4J + Log4j2 · Lombok · Nix flake + direnv.
 
-## Three modules
+## Onboarding service modules
 
 ```
 ┌──────────────────────────── onboarding-server (Spring Boot) ─────────────────────────────┐
@@ -75,7 +96,7 @@ See [ADR-0006](docs/adr/0006-nix-dev-environment.md).
 
 ```bash
 direnv allow                 # first time only; loads JDK 21 + Gradle from flake.nix
-./gradlew build              # compiles, tests (92) and packages all modules
+./gradlew build              # compiles, tests (140) and packages all modules
 ./gradlew bootRun            # runs onboarding-server with the dev profile (set by the shell)
 ./gradlew :partner-quality:publishToMavenLocal   # installs the library into ~/.m2
 ```
@@ -220,6 +241,10 @@ curl -s -X POST localhost:8080/api/v1/business-partners -H 'Content-Type: applic
 
 | Module | Level | Classes | Spring? | What it proves |
 |---|---|---|---|---|
+| dq-engine | unit, via public API | `ValidationEngineTest`, `DecisionMappingTest`, `RuleFilterTest` | no | selection, country scope, fault isolation, summary, batching (plain-Java rule logic) |
+| dq-engine | scale | `BoundedMemoryTest` | no | 1M records × 3 rules stream through on a 64 MB heap |
+| dq-engine-cel | scenario | `RequirementScenarioTest`, `FaultIsolationTest` | no | the task's 3 × 3 decision table with provenance, and its fault-isolation case, from the task's JSON |
+| dq-engine-cel | unit | `CelLogicCompilerTest` | no | CEL compilation, evaluation, `present()`, referenced fields, error mapping |
 | partner-quality | unit, via public API | `VatIdRuleTest`, `IbanRuleTest`, `AddressRulesTest`, `DataQualityEngineTest`, `DuplicateDetectorTest`, `MatchingPolicyTest`, `PartnerDataTest` | no | rules, engine fault isolation, matching and its thresholds, input normalization (reference vectors) |
 | partner-quality | unit, whitebox | `JaroWinklerTest`, `NameNormalizerTest` | no | internal algorithms |
 | onboarding-application | use case | `OnboardingServiceTest` with the `InMemoryPartnerStore` fake | no | orchestration through ports; no mocks needed |
@@ -259,7 +284,8 @@ run everything again.
 
 ## Further documentation
 
-- **Module READMEs**: [`partner-quality`](partner-quality/README.md) (library, from a consumer's point of
+- **Module READMEs**: [`dq-engine`](dq-engine/README.md) (rule engine core) ·
+  [`dq-engine-cel`](dq-engine-cel/README.md) (CEL rule logic) · [`partner-quality`](partner-quality/README.md) (library, from a consumer's point of
   view) · [`onboarding-application`](onboarding-application/README.md) (hexagon, ports, use cases) ·
   [`onboarding-server`](onboarding-server/README.md) (adapters, API, configuration, logging) ·
   [`build-logic`](build-logic/README.md) (convention plugins).

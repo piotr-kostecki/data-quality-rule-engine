@@ -1,0 +1,5 @@
+[
+  { "id": "r1", "vatId": "DE111111111", "country": "DE", "legalName": "ACME GmbH", "iban": "DE123456789" },
+  { "id": "r2", "vatId": "FR22", "country": "FR", "legalName": "Bricolage SARL", "iban": "FR123456789" },
+  { "id": "r3", "country": "ZZ", "legalName": "Nowhere Ltd", "iban": "" }
+]

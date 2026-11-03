@@ -1,0 +1,14 @@
+plugins {
+    id 'onboarding.library-conventions'
+}
+
+description = 'Rule logic for dq-engine written as CEL (Common Expression Language) expressions'
+
+dependencies {
+    api project(':dq-engine')
+    // CEL brings protobuf and Guava; keeping it in this module leaves dq-engine dependency-free
+    implementation libs.cel
+
+    // Reads the task's JSON fixtures in tests; the library itself has no JSON dependency
+    testImplementation libs.jackson.databind
+}

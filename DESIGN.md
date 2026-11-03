@@ -13,6 +13,27 @@ This document describes a reusable Java library that validates business-partner 
 catalog of data-quality rules. HTTP APIs, batch workers and scheduled jobs embed it. The source of
 truth for requirements is [`raw/REQUIREMENT.md`](raw/REQUIREMENT.md).
 
+## Implementation status (iteration 1, first slice)
+
+| Built and tested | Module |
+|---|---|
+| Model: `Rule`, `DecisionMapping` (A-1 default), `CountryScope`, `RuleStatus`, `Severity`, `Decision`, `DataRecord`, `RecordSchema` | [`dq-engine`](dq-engine) |
+| Outcomes with provenance: `Result`, `RuleError` (`MISSING_FIELD`, `EVALUATION_FAILED`, `BAD_RECORD`), `RuleSkipped` (A-2) | `dq-engine` |
+| Streaming `ValidationEngine.run` with configurable batch size, `ResultSink`, fault isolation, `RunSummary`; `validate` for bounded input | `dq-engine` |
+| Composable `RuleFilter` (status, category, country) with the `RELEASED` guard; country-indexed rule plan (A-3); explain levels `RESULTS` and `SKIPS` | `dq-engine` |
+| Rule logic as CEL: `CelLogicCompiler`, `present()`, standard macros, referenced-field extraction, missing-field and evaluation-error mapping | [`dq-engine-cel`](dq-engine-cel) |
+| Requirement scenario (§5 of the task) and fault isolation, records read from the task's JSON | `dq-engine-cel` tests |
+| 1M records on a 64 MB heap (streaming proven; collecting the same run fails with `OutOfMemoryError`) | `dq-engine` tests |
+
+**Not built yet:**
+- the JSON/NDJSON record source and the YAML/JSON catalog loader (`dq-engine-json`);
+- the HTTP example on the new engine;
+- `ValueMasker`, `RunListener`, the `TRACE` explain level, an optional `Executor`;
+- CEL cost limits;
+- restructuring the old onboarding modules (§8).
+
+Today records come in as any `Iterable<DataRecord>`, and rules are built in code (`RuleCatalog.of(...)`).
+
 ---
 
 ## 1. The problem in one paragraph
@@ -64,9 +85,9 @@ Main types (all immutable, `@NullMarked`):
 | `RuleStatus` | enum | `DRAFT`, `RELEASED`, `DEPRECATED` |
 | `CountryScope` | sealed interface | `World` or `Countries(Set<String>)`. A missing scope means `World`. |
 | `Rule` | final class + builder | Validated when built: id must be non-blank, logic must compile, decision names must be known. |
-| `RuleLogic` | interface (seam) | `String evaluate(Record record)` plus `Set<String> referencedFields()`. Core defines only the interface. The CEL module implements it, and tests or hosts can implement it in plain Java. |
+| `RuleLogic` | interface (seam) | `String evaluate(DataRecord record)` plus `Set<String> referencedFields()`. Core defines only the interface. The CEL module implements it, and tests or hosts can implement it in plain Java. |
 | `DecisionMapping` | record | `Map<String, Decision>` plus a `Decision` default. Matching is exact and case-sensitive. If the catalog gives no default, the default is `REVIEW` (assumption A-1). |
-| `Record` | interface | `id()`, `country()`, `fields()`. Adapters wrap Jackson nodes, `Map`s and other inputs. |
+| `DataRecord` | record | the record's fields as a map; `RecordSchema` says which fields hold the id and country. Named `DataRecord` so it doesn't clash with `java.lang.Record`. Adapters build it from Jackson nodes, `Map`s and other inputs. |
 | `Result`, `RuleError` | records | Both implement the sealed `Outcome`, so a consumer can `switch` over them exhaustively. |
 
 ### Rule logic: CEL expressions
@@ -131,17 +152,24 @@ CEL internals.
 ## 4. Public API and why it is shaped this way
 
 ```java
+CelLogicCompiler cel = CelLogicCompiler.create();                  // immutable, thread-safe, reusable
+
+Rule vatFormat = Rule.builder("vatFormat")
+        .status(RuleStatus.RELEASED)
+        .logic(cel.compile("present(record, 'vatId') && size(record.vatId) >= 9 ? 'ok' : 'bad'"))
+        .mapping(DecisionMapping.when("ok", Decision.VALID).when("bad", Decision.INVALID).withImplicitDefault())
+        .build();
+
 ValidationEngine engine = ValidationEngine.builder()
-        .catalog(RuleCatalog.fromYaml(path, CelLogicCompiler.standard()))  // or RuleCatalog.of(rules...)
+        .catalog(RuleCatalog.of(vatFormat /* , ... */))               // later also: a YAML/JSON catalog loader
         .build();                                                       // immutable, thread-safe, reusable
 
 RunSummary summary = engine.run(
-        RecordSource.jsonArray(inputStream),                            // pulled lazily
+        records,                                                        // any Iterable<DataRecord>, pulled lazily
         sink,                                                           // results + errors pushed as produced
-        RunOptions.builder()
-                .filter(RuleFilter.category("tax").and(RuleFilter.country("DE")))
-                .batchSize(1_000)
-                .build());
+        RunOptions.DEFAULT
+                .withFilter(RuleFilter.category("tax").and(RuleFilter.country("DE")))
+                .withBatchSize(1_000));
 ```
 
 ```java
@@ -159,7 +187,7 @@ Why this shape:
 - **Push sink, not a returned list.** A list would hold all results in memory and break F5. A pushed
   sink keeps memory bounded, and because the sink is called synchronously, a slow sink slows the
   engine down (natural backpressure). The summary is returned once the run finishes.
-- **A convenience method for small inputs.** `engine.validate(List<Record>) → ValidationReport`
+- **A convenience method for small inputs.** `engine.validate(List<DataRecord>) → ValidationReport`
   collects results, errors and the summary. The HTTP example and tests use it. Its javadoc says it is
   for bounded input only.
 - **Values, not exceptions, for expected outcomes.** `INVALID` is a normal result, and a crashing rule
@@ -232,7 +260,7 @@ setting (`dq.explain-level`), not a request parameter.
 | Failure | Detected where | What happens |
 |---|---|---|
 | Rule logic throws (bug, NPE, parse error) | around each *rule × record* evaluation | `RuleError(kind=RULE_FAILED, recordId, ruleId, fieldsReadSoFar, exception class + message)`. The next rule runs. |
-| Record unreadable (not an object, no country, …) | `RecordSource` / `Record` | `RuleError(kind=BAD_RECORD, ruleId=null)`. The record is skipped and the batch continues. |
+| Record unreadable (e.g. its country is not text) | engine, before any rule runs | `RuleError(kind=BAD_RECORD, ruleId=null)`. The record is skipped and the batch continues. |
 | Invalid catalog (duplicate ids, CEL syntax or type error, non-string result, bad decision name) | catalog load / `build()` | **Fails fast before the run** with every problem listed. Configuration errors should be loud. |
 | CEL evaluation error (absent key, wrong type, e.g. `"country": 42`) | around each evaluation | `RuleError(kind=MISSING_FIELD / BAD_FIELD_TYPE / RULE_FAILED)`, mapped from the CEL error. |
 | Host sink throws | engine | Not isolated: it is the host's own code. The run stops with `RunAbortedException`, which carries the summary so far. |
@@ -245,10 +273,10 @@ may have no id), rule id, the fields the rule had read, and the exception type.
 
 | Seam | Interface | Shipped implementations | Example host implementation |
 |---|---|---|---|
-| Where records come from | `RecordSource` (iterator-like, `AutoCloseable`) | JSON array, NDJSON, `Iterable<Record>` | DB cursor, Kafka topic, S3 file |
-| What a record looks like | `Record` + `RecordSchema` (which field is the id or country) | Jackson `JsonNode`, `Map<String,?>` | Avro/Protobuf view |
+| Where records come from | any `Iterable<DataRecord>` today; a `RecordSource` (`AutoCloseable`) with the JSON module | JSON array, NDJSON (planned) | DB cursor, Kafka topic, S3 file |
+| What a record looks like | `DataRecord` + `RecordSchema` (which field is the id or country) | Jackson `JsonNode`, `Map<String,?>` | Avro/Protobuf view |
 | Where rules come from | `RuleCatalog` | in code, JSON/YAML file | rule-management service, DB |
-| How rule logic is defined | `RuleLogic` + `LogicCompiler` | CEL compiler with helper functions (`present`, …) | plain-Java logic, another expression language |
+| How rule logic is defined | `RuleLogic` + `CelLogicCompiler` | CEL compiler with helper functions (`present`, …) | plain-Java logic, another expression language |
 | Extra CEL functions | `CelFunctionLibrary` (ServiceLoader SPI) | `present`, `blank` | `mod97`, company-specific checks |
 | Which rules run | `RuleFilter` (`and` / `or` / `not`) | by status, category, country | by owner team, by tag |
 | Where outcomes go | `ResultSink` | collecting (small input), NDJSON writer, counting | DB writer, message topic |
@@ -267,7 +295,7 @@ dev shell, strict compiler and javadoc settings.
 
 ```
 dq-engine            core: model, engine loop, filters, catalog API, RuleLogic seam  (deps: jspecify)
-dq-engine-cel        CEL LogicCompiler, helper functions, provenance extraction       (deps: core, dev.cel:cel)
+dq-engine-cel        CelLogicCompiler, helper functions, provenance extraction        (deps: core, dev.cel:cel)
 dq-engine-json       JSON/NDJSON RecordSource, YAML/JSON catalog loader               (deps: core, jackson)
 dq-example-http      Spring Boot HTTP API validating a posted batch                   (deps: all three)
 build-logic          Groovy convention plugins + gradle/libs.versions.toml            (kept)
@@ -336,7 +364,8 @@ Each remaining question lists my suggestion first.
   input, which is always there. A missing id is not a failure.
 - **Q-I — Should the rule version be in provenance?** *Suggestion:* store the catalog version (and the
   rule version if present) in every result.
-- **Q-J — What package or group name should the code use?** *Suggestion:* a neutral namespace such as
+- **Q-J — What package or group name should the code use?** The code currently uses `com.example.dq.*`,
+  matching the existing modules. *Suggestion:* a neutral namespace such as
   `io.github.<you>.dq`.
 
 ## 10. Assumptions to confirm

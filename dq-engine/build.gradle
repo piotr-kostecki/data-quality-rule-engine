@@ -1,0 +1,15 @@
+plugins {
+    id 'onboarding.library-conventions'
+}
+
+description = 'Data-quality rule engine: rules with declarative decision mappings, streaming runs, fault isolation'
+
+dependencies {
+    // Null-safety annotations are part of the public API, so consumers need them too
+    api libs.jspecify
+}
+
+tasks.named('test') {
+    // A small heap makes the bounded-memory test meaningful: accumulating 1M runs' results would not fit
+    maxHeapSize = '64m'
+}

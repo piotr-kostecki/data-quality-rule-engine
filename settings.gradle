@@ -19,6 +19,8 @@ dependencyResolutionManagement {
 
 rootProject.name = 'partner-onboarding'
 
+include 'dq-engine'                // rule engine core: model, decision mapping, filters, streaming run, no deps
+include 'dq-engine-cel'            // rule logic as CEL expressions, on top of dq-engine
 include 'partner-quality'          // reusable library: rules + duplicate detection, no framework
 include 'onboarding-application'   // hexagon: domain, ports, use-case services, no framework
 include 'onboarding-server'        // Spring Boot: adapters (web, persistence, events) + wiring
