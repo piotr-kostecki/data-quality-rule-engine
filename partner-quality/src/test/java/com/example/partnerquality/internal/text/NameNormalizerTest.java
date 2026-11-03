@@ -12,7 +12,7 @@ class NameNormalizerTest {
             "Acme Chemicals GmbH, acme chemicals",
             "ACME-Chemicals G.m.b.H., acme chemicals",
             "Müller Logistik GmbH & Co. KG, mueller logistik",
-            "Odra Logistyka sp. z o.o., odra logistyka",
+            "Przykład Logistyka sp. z o.o., przyklad logistyka",
             "Łódź Trading S.A., lodz trading",
             "Alpen Präzision AG, alpen praezision",
             "AG, ag"

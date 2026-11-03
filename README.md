@@ -74,7 +74,7 @@ See [ADR-0006](docs/adr/0006-nix-dev-environment.md).
 
 ```bash
 direnv allow                 # first time only; loads JDK 21 + Gradle from flake.nix
-./gradlew build              # compiles, tests (82) and packages all modules
+./gradlew build              # compiles, tests (92) and packages all modules
 ./gradlew bootRun            # runs onboarding-server with the dev profile (set by the shell)
 ./gradlew :partner-quality:publishToMavenLocal   # installs the library into ~/.m2
 ```
@@ -203,12 +203,27 @@ curl -s -X POST localhost:8080/api/v1/business-partners -H 'Content-Type: applic
 
 | Module | Level | Classes | Spring? | What it proves |
 |---|---|---|---|---|
-| partner-quality | unit, via public API | `VatIdRuleTest`, `IbanRuleTest`, `AddressRulesTest`, `DataQualityEngineTest`, `DuplicateDetectorTest`, `PartnerDataTest` | no | rules, engine fault isolation, matching, input normalization (reference vectors) |
+| partner-quality | unit, via public API | `VatIdRuleTest`, `IbanRuleTest`, `AddressRulesTest`, `DataQualityEngineTest`, `DuplicateDetectorTest`, `MatchingPolicyTest`, `PartnerDataTest` | no | rules, engine fault isolation, matching and its thresholds, input normalization (reference vectors) |
 | partner-quality | unit, whitebox | `JaroWinklerTest`, `NameNormalizerTest` | no | internal algorithms |
 | onboarding-application | use case | `OnboardingServiceTest` with the `InMemoryPartnerStore` fake | no | orchestration through ports; no mocks needed |
 | onboarding-server | web slice | `BusinessPartnerControllerTest` (in-ports mocked) | MVC only | HTTP contract per outcome |
 | onboarding-server | integration | `OnboardingApiIntegrationTest` | full | the whole flow, OpenAPI, actuator |
+| onboarding-server | integration | `MatchingThresholdsConfigurationTest` | full | duplicate thresholds come from `onboarding.matching.*`; invalid values stop the start-up |
+| onboarding-server | integration | `DemoProfileTest` | full | the `demo` seed data that the README examples and `http/requests.http` rely on |
 | onboarding-server | architecture | `HexagonalArchitectureTest` | no | onion layering and port rules |
+
+Run them with `./gradlew test`. Each module prints a summary line, for example
+`partner-quality: 67 tests, 67 passed, 0 failed, 0 skipped -> SUCCESS`; failures are printed in full.
+
+Results per module:
+
+| What | Where |
+|---|---|
+| HTML report (open in a browser) | `<module>/build/reports/tests/test/index.html` |
+| JUnit XML (for CI and tools) | `<module>/build/test-results/test/*.xml` |
+
+`./gradlew test` skips modules whose code hasn't changed (up to date). Use `./gradlew test --rerun-tasks` to
+run everything again.
 
 ## Decisions
 

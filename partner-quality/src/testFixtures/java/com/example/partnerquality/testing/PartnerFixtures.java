@@ -31,8 +31,8 @@ public final class PartnerFixtures {
     }
 
     /** A fully valid Polish partner. */
-    public static PartnerData odra() {
-        return new PartnerData("Odra Logistyka sp. z o.o.",
+    public static PartnerData polishLogistics() {
+        return new PartnerData("Przykład Logistyka sp. z o.o.",
                 new Address("ul. Testowa 1", "30-001", "Kraków", "PL"), VALID_PL_NIP, VALID_PL_IBAN);
     }
 

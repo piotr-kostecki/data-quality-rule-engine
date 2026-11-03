@@ -30,4 +30,12 @@ tasks.withType(Test).configureEach {
         events 'skipped', 'failed'
         exceptionFormat = 'full'
     }
+    // One summary line per module, so a green run also shows what was executed
+    def moduleName = project.name
+    afterSuite { descriptor, result ->
+        if (descriptor.parent == null) {
+            System.out.println("${moduleName}: ${result.testCount} tests, ${result.successfulTestCount} passed, " +
+                    "${result.failedTestCount} failed, ${result.skippedTestCount} skipped -> ${result.resultType}")
+        }
+    }
 }

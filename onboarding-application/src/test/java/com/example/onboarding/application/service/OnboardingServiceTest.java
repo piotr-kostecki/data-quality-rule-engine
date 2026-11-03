@@ -87,6 +87,18 @@ class OnboardingServiceTest {
     }
 
     @Test
+    void checkReportsABlockingDuplicateAsNotOnboardable() {
+        service.onboard(new OnboardPartnerCommand(PartnerFixtures.acme()));
+
+        QualityCheck check = service.check(PartnerFixtures.acme());
+
+        assertThat(check.report().hasErrors()).isFalse();
+        assertThat(check.duplicates()).singleElement().extracting(m -> m.reason()).isEqualTo(MatchReason.SAME_VAT_ID);
+        assertThat(check.onboardable()).isFalse();
+        assertThat(store.partners).hasSize(1);
+    }
+
+    @Test
     void checkIsADryRun() {
         QualityCheck check = service.check(PartnerFixtures.acme());
 
@@ -96,7 +108,7 @@ class OnboardingServiceTest {
 
     @Test
     void findByCountryIsCaseInsensitive() {
-        service.onboard(new OnboardPartnerCommand(PartnerFixtures.odra()));
+        service.onboard(new OnboardPartnerCommand(PartnerFixtures.polishLogistics()));
 
         assertThat(service.findByCountry("pl")).hasSize(1);
     }

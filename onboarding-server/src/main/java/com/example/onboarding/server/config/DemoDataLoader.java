@@ -24,7 +24,7 @@ public class DemoDataLoader implements ApplicationRunner {
     public void run(ApplicationArguments args) {
         onboard(new PartnerData("Acme Chemicals GmbH",
                 new Address("Industriestraße 1", "10115", "Berlin", "DE"), "DE136695976", "DE89370400440532013000"));
-        onboard(new PartnerData("Odra Logistyka sp. z o.o.",
+        onboard(new PartnerData("Przykład Logistyka sp. z o.o.",
                 new Address("ul. Testowa 1", "30-001", "Kraków", "PL"), "PL1234563218", "PL61109010140000071219812874"));
         onboard(new PartnerData("Alpen Präzision AG",
                 new Address("Bahnhofstrasse 10", "8001", "Zürich", "CH"), "CHE-116.281.710 MWST", "CH9300762011623852957"));
