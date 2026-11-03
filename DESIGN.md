@@ -7,8 +7,11 @@
 >
 > **Part I (§1–12)** describes the core library being built now. **Part II (§13–21)** is the
 > evolution plan: observability, event log, scaling out, versioning, CI/CD, tooling, security
-> testing with a tool-agnostic pipeline, and API / end-to-end testing. It is
-> planned only and not implemented.
+> testing with a tool-agnostic pipeline, and API / end-to-end testing. It is planned, except for
+> the items marked ✅.
+>
+> **Markers:** ✅ = done (implemented, and tested where it is code). Unmarked items are designed or
+> planned but not built yet. 🔍 = a proposal to investigate for possible later use, not a decision.
 
 This document describes a reusable Java library that validates business-partner records against a
 catalog of data-quality rules. HTTP APIs, batch workers and scheduled jobs embed it. The source of
@@ -34,6 +37,12 @@ truth for requirements is [`raw/REQUIREMENT.md`](raw/REQUIREMENT.md).
 - restructuring the old onboarding modules (§8).
 
 Today records come in as any `Iterable<DataRecord>`, and rules are built in code (`RuleCatalog.of(...)`).
+
+Also done ✅, outside the engine:
+- in the HTTP service `onboarding-server`: observability (OpenTelemetry, OTLP export, Prometheus,
+  probes, §14) and logging (Log4j2, Logstash JSON);
+- API test suites in [`api-tests/`](api-tests) (§21);
+- the build and development environment (§8).
 
 ---
 
@@ -64,17 +73,67 @@ in bounded memory.
 
 ## 3. Domain model
 
-```
-Rule ──────────── id, label, status, severity, countryScope, categories
- ├─ RuleLogic       (record fields) → value        a compiled CEL expression, e.g. → "ok" / "bad"
- └─ DecisionMapping  value → Decision, + default    e.g. ok→VALID, bad→INVALID, *→REVIEW
+✅ Implemented in [`dq-engine`](dq-engine) as described below.
 
-Record  ── read-only view of one JSON object (id, country, fields)
-
-Outcome ─┬─ Result     decision + severity + Provenance
-         └─ RuleError  where (record, rule?) + kind + message + cause
-Provenance ── rule id, record id/position, computed value, fields read (name → value), matched entry or default
-RunSummary ── #records, #results, #errors, results by decision, results by severity, duration
+```mermaid
+classDiagram
+    direction LR
+    class Rule {
+        +String id
+        +String label
+        +RuleStatus status
+        +Severity severity
+        +CountryScope countryScope
+        +Set~String~ categories
+    }
+    class RuleLogic {
+        <<interface>>
+        +evaluate(DataRecord) String
+        +referencedFields() Set~String~
+    }
+    class DecisionMapping {
+        +Map cases
+        +Decision defaultDecision
+        +decide(String value) Decision
+    }
+    class DataRecord {
+        +Map fields
+    }
+    class Outcome {
+        <<sealed interface>>
+    }
+    class Result {
+        +Decision decision
+        +Severity severity
+    }
+    class RuleError {
+        +Kind kind
+        +String message
+    }
+    class RuleSkipped {
+        +Reason reason
+    }
+    class Provenance {
+        +String ruleId
+        +RecordRef record
+        +String value
+        +List~FieldValue~ fields
+        +boolean defaultMapped
+    }
+    class RunSummary {
+        +long records
+        +long results
+        +long errors
+        +Map resultsByDecision
+        +Map resultsBySeverity
+    }
+    Rule --> RuleLogic : computes a value
+    Rule --> DecisionMapping : value to decision
+    RuleLogic ..> DataRecord : reads
+    Outcome <|.. Result
+    Outcome <|.. RuleError
+    Outcome <|.. RuleSkipped
+    Result --> Provenance
 ```
 
 Main types (all immutable, `@NullMarked`):
@@ -85,13 +144,18 @@ Main types (all immutable, `@NullMarked`):
 | `Severity` | enum | `ERROR`, `WARNING`, `INFO` |
 | `RuleStatus` | enum | `DRAFT`, `RELEASED`, `DEPRECATED` |
 | `CountryScope` | sealed interface | `World` or `Countries(Set<String>)`. A missing scope means `World`. |
-| `Rule` | final class + builder | Validated when built: id must be non-blank, logic must compile, decision names must be known. |
+| `Rule` | final class + builder | Validated when built: the id must be non-blank, and logic and mapping are required. Expressions are checked when they are compiled (§6). |
 | `RuleLogic` | interface (seam) | `String evaluate(DataRecord record)` plus `Set<String> referencedFields()`. Core defines only the interface. The CEL module implements it, and tests or hosts can implement it in plain Java. |
 | `DecisionMapping` | record | `Map<String, Decision>` plus a `Decision` default. Matching is exact and case-sensitive. If the catalog gives no default, the default is `REVIEW` (assumption A-1). |
 | `DataRecord` | record | the record's fields as a map; `RecordSchema` says which fields hold the id and country. Named `DataRecord` so it doesn't clash with `java.lang.Record`. Adapters build it from Jackson nodes, `Map`s and other inputs. |
-| `Result`, `RuleError` | records | Both implement the sealed `Outcome`, so a consumer can `switch` over them exhaustively. |
+| `Result`, `RuleError`, `RuleSkipped` | records | All implement the sealed `Outcome`, so a consumer can `switch` over them exhaustively. |
 
 ### Rule logic: CEL expressions
+
+✅ Implemented in [`dq-engine-cel`](dq-engine-cel) with CEL 0.14.0: `CelLogicCompiler`, the `present()`
+helper, the standard macros, and compile-time rejection of invalid expressions and non-string results. The
+YAML catalog file shown below is the planned format, not built yet; today the same rules are built in
+code (`FixtureRules` in the tests).
 
 Rule logic is written in [CEL (Common Expression Language)](https://cel.dev), Google's expression
 language for policies (`dev.cel:cel`). The whole rule is then data: the expression, the mapping and
@@ -140,17 +204,19 @@ The fixture catalog:
   decisions: { ok: VALID, bad: INVALID }
 ```
 
-`present(record, field)` is a small custom CEL function the library provides: the key exists, is a
+`present(record, field)` ✅ is a small custom CEL function the library provides: the key exists, is a
 string and is not blank. Other helpers (`blank`, `digitsOnly`, `mod97`) can be added the same way
 through a function registry. A catalog may also define its own functions in Java (Q-B).
 
-**Provenance from expressions:** when an expression is compiled, the engine collects every
+**Provenance from expressions** ✅: when an expression is compiled, the engine collects every
 `record.<field>` it references from the checked syntax tree. Each result records those fields with
 their values for that record. This is "fields the rule references", which may be slightly more than
 the fields read on the branch that actually ran. In return it is cheap, exact and does not depend on
 CEL internals.
 
 ## 4. Public API and why it is shaped this way
+
+✅ Implemented as shown (`dq-engine`, `dq-engine-cel`).
 
 ```java
 CelLogicCompiler cel = CelLogicCompiler.create();                  // immutable, thread-safe, reusable
@@ -177,6 +243,7 @@ RunSummary summary = engine.run(
 public interface ResultSink {
     void onResult(Result result);
     void onError(RuleError error);
+    default void onSkipped(RuleSkipped skipped) {}  // only at ExplainLevel.SKIPS
     default void onBatchEnd(BatchInfo batch) {}     // a place to commit, flush or checkpoint
 }
 ```
@@ -189,47 +256,50 @@ Why this shape:
   sink keeps memory bounded, and because the sink is called synchronously, a slow sink slows the
   engine down (natural backpressure). The summary is returned once the run finishes.
 - **A convenience method for small inputs.** `engine.validate(List<DataRecord>) → ValidationReport`
-  collects results, errors and the summary. The HTTP example and tests use it. Its javadoc says it is
-  for bounded input only.
+  collects results, errors and the summary. The tests use it, and so will the planned HTTP example. Its
+  javadoc says it is for bounded input only.
 - **Values, not exceptions, for expected outcomes.** `INVALID` is a normal result, and a crashing rule
   is a normal `RuleError`. The engine throws only when the caller made a mistake (bad options, an
   invalid catalog) or when the host's own sink throws.
-- **Immutable and built once.** The engine checks the catalog and compiles a rule plan when it is
-  built, so every run reuses that work. Rule logic must be thread-safe, and pure logic is.
-- **A small, explicit API.** JPMS `module-info` exports only the API packages. The implementation lives
-  in `internal`. Null-safety is stated with JSpecify.
+- **Immutable and built once.** The engine checks the catalog (e.g. duplicate rule ids) when it is
+  built. Each run selects its rules and indexes them by country once. Rule logic must be thread-safe, and
+  pure logic is.
+- **A small, explicit API.** The JPMS module `com.example.dq.engine` exports one package; helpers such as
+  the rule plan and the counters are package-private. Null-safety is stated with JSpecify.
 
 ## 5. Bounded memory and streaming
 
-```
-RecordSource ──pull batchSize records──▶ [ batch ] ──for each record × applicable rule──▶ Outcome ──push──▶ ResultSink
-                                             ▲                                                              │
-                                             └──────────────── next batch after onBatchEnd ◀────────────────┘
+```mermaid
+flowchart LR
+    src["records<br/>Iterable of DataRecord"] -- "pull batchSize records" --> batch["batch"]
+    batch -- "each record x applicable rule" --> outcome["Result or RuleError"]
+    outcome -- "push" --> sink["ResultSink"]
+    sink -- "onBatchEnd, then the next batch" --> src
 ```
 
-- **What stays in memory:** the compiled rule plan (size depends on the number of rules), one batch of
+- ✅ **What stays in memory:** the compiled rule plan (size depends on the number of rules), one batch of
   records and its outcomes (size depends on batch size × rules per record), and the summary counters
   (fixed size: an `EnumMap` of `long`s). **None of this grows with the total number of records.**
-- **What is never kept:** past records, past results, past errors. Errors are streamed like results,
+- ✅ **What is never kept:** past records, past results, past errors. Errors are streamed like results,
   because a broken rule on 1M records means 1M errors.
-- **Country lookup is O(1).** The plan groups rules by country, so the rules for a record are
+- ✅ **Country lookup is O(1).** The plan groups rules by country, so the rules for a record are
   `world rules + rules for that country`. The engine does not scan the whole catalog for each record.
-- **Reading input:** `RecordSource.jsonArray` uses Jackson's streaming `JsonParser`, so a 1M-element
-  array is never loaded at once. NDJSON (one record per line) is supported too, and recovers better
-  from a malformed record.
-- **Parallelism (decided):** sequential on the caller's thread by default. The host can pass an
-  `Executor`, and the engine then evaluates a batch in parallel and still emits outcomes in input
-  order, so results stay reproducible. The library never starts threads of its own. Distributing work
-  across machines is the job of the host's platform (Spark, Flink, Temporal; see §16).
-- **Proof:** a test generates 1,000,000 records lazily and counts outcomes in a sink while the test JVM
-  runs with `-Xmx64m`.
+- **Reading input** (planned, `dq-engine-json`): `RecordSource.jsonArray` will use Jackson's streaming
+  `JsonParser`, so a 1M-element array is never loaded at once. NDJSON (one record per line) will be
+  supported too, and recovers better from a malformed record.
+- **Parallelism (decided):** sequential on the caller's thread by default ✅, and the library never
+  starts threads of its own ✅. Planned: the host can pass an `Executor`, and the engine then evaluates a
+  batch in parallel and still emits outcomes in input order, so results stay reproducible. Distributing
+  work across machines would be the job of the host's platform (proposals to investigate in §16).
+- ✅ **Proof:** `BoundedMemoryTest` generates 1,000,000 records lazily and counts outcomes in a sink while the test JVM
+  runs with a 64 MB heap. Collecting the same run in memory fails with `OutOfMemoryError`.
 
 Known limitation: checks that need the whole run, such as detecting duplicate record ids across the
 input, would need memory proportional to N. They are out of scope; rules see only one record.
 
 ### Country scope and the cost of wide rules
 
-A rule applies to a record **only** when its scope is `WORLD` or its country equals the record's
+✅ A rule applies to a record **only** when its scope is `WORLD` or its country equals the record's
 country. This check is always on and can't be switched off. `RuleFilter.country(...)` can narrow a
 run further but never widen it. A record with no country or an unknown country (r3's `ZZ`) gets
 `WORLD` rules only (assumption A-3).
@@ -248,45 +318,47 @@ not by each API caller. It works like a log level:
 
 | Level | Emitted | Typical use |
 |---|---|---|
-| `RESULTS` (default) | results, errors, summary. Skipped rules are only *counted* (`skippedByScope`, `skippedByFilter`). | production runs at 1M records |
-| `SKIPS` | also one `RuleSkipped(record, rule, reason)` event per rule that didn't apply | "why didn't rule X run on record Y?" |
+| `RESULTS` (default) ✅ | results, errors, summary. Skipped rule/record pairs are only *counted* (`RunSummary.skipped`). | production runs at 1M records |
+| `SKIPS` ✅ | also one `RuleSkipped(record, rule, reason)` event per rule that didn't apply | "why didn't rule X run on record Y?" |
 | `TRACE` | also per-evaluation timing and every referenced field value | profiling, debugging one batch |
 
 Skips are separate `RuleSkipped` events and **not** `NOT_APPLICABLE` results, so the F4 summary
-counts don't change with the level (assumption A-2). In the HTTP example the level is a server
-setting (`dq.explain-level`), not a request parameter.
+counts don't change with the level (assumption A-2) ✅. In the planned HTTP example the level will be a
+server setting (`dq.explain-level`), not a request parameter.
 
 ## 6. Fault isolation
 
 | Failure | Detected where | What happens |
 |---|---|---|
-| Rule logic throws (bug, NPE, parse error) | around each *rule × record* evaluation | `RuleError(kind=RULE_FAILED, recordId, ruleId, fieldsReadSoFar, exception class + message)`. The next rule runs. |
-| Record unreadable (e.g. its country is not text) | engine, before any rule runs | `RuleError(kind=BAD_RECORD, ruleId=null)`. The record is skipped and the batch continues. |
-| Invalid catalog (duplicate ids, CEL syntax or type error, non-string result, bad decision name) | catalog load / `build()` | **Fails fast before the run** with every problem listed. Configuration errors should be loud. |
-| CEL evaluation error (absent key, wrong type, e.g. `"country": 42`) | around each evaluation | `RuleError(kind=MISSING_FIELD / BAD_FIELD_TYPE / RULE_FAILED)`, mapped from the CEL error. |
-| Host sink throws | engine | Not isolated: it is the host's own code. The run stops with `RunAbortedException`, which carries the summary so far. |
-| `OutOfMemoryError` and other `VirtualMachineError`s | — | Not caught. The JVM is in an unknown state. `StackOverflowError` from a host's Java `RuleLogic` *is* caught. |
+| ✅ Rule logic throws, or returns `null` (bug, NPE, parse error) | around each *rule × record* evaluation | `RuleError(kind=EVALUATION_FAILED)` with record id and position, rule id, the referenced fields with their values, and the exception class and message. The next rule runs. |
+| ✅ Record unreadable (e.g. its country is not text) | engine, before any rule runs | `RuleError(kind=BAD_RECORD, ruleId=null)`. The record is skipped and the batch continues. |
+| ✅ Invalid expression (CEL syntax or type error, non-string result) | `CelLogicCompiler.compile` | `RuleCompilationException` before any record is validated. |
+| ✅ Duplicate rule ids | `ValidationEngine.builder().build()` | **Fails fast before the run.** Configuration errors should be loud. |
+| Invalid catalog file (bad decision name, bad structure) | catalog loader (planned) | Fails fast with every problem listed. |
+| ✅ CEL evaluation error (absent key, wrong type, e.g. `startsWith` on a number) | around each evaluation | `RuleError(kind=MISSING_FIELD)` for an absent key, `RuleError(kind=EVALUATION_FAILED)` otherwise, mapped from the CEL error. |
+| ✅ Host sink (or record source) throws | engine | Not isolated: it is the host's own code. The run stops with `RunAbortedException`, which carries the summary so far. |
+| ✅ `OutOfMemoryError` and other `VirtualMachineError`s | — | Not caught. The JVM is in an unknown state. `StackOverflowError` from a host's Java `RuleLogic` *is* caught. |
 
-Every error carries enough to locate its cause: record id **and** position in the input (a record
-may have no id), rule id, the fields the rule had read, and the exception type.
+✅ Every error carries enough to locate its cause: record id **and** position in the input (a record
+may have no id), rule id, the fields the rule references with their values, and the exception type.
 
 ## 7. Seams for host-supplied inputs
 
 | Seam | Interface | Shipped implementations | Example host implementation |
 |---|---|---|---|
-| Where records come from | any `Iterable<DataRecord>` today; a `RecordSource` (`AutoCloseable`) with the JSON module | JSON array, NDJSON (planned) | DB cursor, Kafka topic, S3 file |
-| What a record looks like | `DataRecord` + `RecordSchema` (which field is the id or country) | Jackson `JsonNode`, `Map<String,?>` | Avro/Protobuf view |
-| Where rules come from | `RuleCatalog` | in code, JSON/YAML file | rule-management service, DB |
-| How rule logic is defined | `RuleLogic` + `CelLogicCompiler` | CEL compiler with helper functions (`present`, …) | plain-Java logic, another expression language |
-| Extra CEL functions | `CelFunctionLibrary` (ServiceLoader SPI) | `present`, `blank` | `mod97`, company-specific checks |
-| Which rules run | `RuleFilter` (`and` / `or` / `not`) | by status, category, country | by owner team, by tag |
-| Where outcomes go | `ResultSink` | collecting (small input), NDJSON writer, counting | DB writer, message topic |
+| Where records come from | any `Iterable<DataRecord>` today ✅; a `RecordSource` (`AutoCloseable`) with the JSON module | JSON array, NDJSON (planned) | DB cursor, message topic, S3 file |
+| What a record looks like | `DataRecord` + `RecordSchema` (which field is the id or country) ✅ | from a `Map<String,?>` ✅; Jackson `JsonNode` (planned) | Avro/Protobuf view |
+| Where rules come from | `RuleCatalog` ✅ | in code ✅; JSON/YAML file (planned) | rule-management service, DB |
+| How rule logic is defined | `RuleLogic` + `CelLogicCompiler` ✅ | CEL compiler with the `present` helper ✅; plain Java via `RuleLogic.of` ✅ | plain-Java logic, another expression language |
+| Extra CEL functions | `CelFunctionLibrary` (ServiceLoader SPI) | `present` ✅ (built in); `blank` (planned) | `mod97`, company-specific checks |
+| Which rules run | `RuleFilter` (`and` / `or` / `not`) ✅ | by status, category, country ✅ | by owner team, by tag |
+| Where outcomes go | `ResultSink` ✅ | collecting (`validate`) ✅; NDJSON writer (planned) | DB writer, message topic |
 | Threads | `Executor` (optional) | none (runs on the caller's thread) | host's pool |
 | Masking sensitive values | `ValueMasker` (per field) | none, so raw values are kept (decided) | IBAN masked except the last 4 characters |
 | Observability | `RunListener` (run, batch and rule events, gated by explain level) | no-op | OpenTelemetry, Micrometer, event log (§14–15) |
 
-The core module depends only on JSpecify. CEL (protobuf, Guava) and Jackson each live in their own
-module, so a host pays only for what it uses (Q-C).
+The core module depends only on JSpecify ✅. CEL (protobuf, Guava) lives in its own module ✅, and Jackson
+will too, so a host pays only for what it uses (Q-C).
 
 ## 8. Module layout (decided: restructure this repo)
 
@@ -294,18 +366,25 @@ The existing code implements a business-partner onboarding service with duplicat
 replaced by the modules below. Kept: `build-logic` convention plugins, `gradle/libs.versions.toml`, Nix
 dev shell, strict compiler and javadoc settings.
 
-```
-dq-engine            core: model, engine loop, filters, catalog API, RuleLogic seam  (deps: jspecify)
-dq-engine-cel        CelLogicCompiler, helper functions, provenance extraction        (deps: core, dev.cel:cel)
-dq-engine-json       JSON/NDJSON RecordSource, YAML/JSON catalog loader               (deps: core, jackson)
-dq-example-http      Spring Boot HTTP API validating a posted batch                   (deps: all three)
-build-logic          Groovy convention plugins + gradle/libs.versions.toml            (kept)
+```mermaid
+flowchart LR
+    core["✅ dq-engine<br/>model, engine loop, filters, catalog API, RuleLogic seam<br/>deps: jspecify"]
+    cel["✅ dq-engine-cel<br/>CelLogicCompiler, helper functions, provenance extraction<br/>deps: core, dev.cel:cel"]
+    json["dq-engine-json<br/>JSON/NDJSON RecordSource, YAML/JSON catalog loader<br/>deps: core, jackson"]
+    http["dq-example-http<br/>Spring Boot HTTP API validating a posted batch"]
+    bl["✅ build-logic<br/>Groovy convention plugins + version catalog"]
+    cel --> core
+    json --> core
+    http --> cel
+    http --> json
 ```
 
-To be removed in the restructure: `onboarding-application`, `partner-quality` (its IBAN/VAT code can
+✅ = built. `dq-engine-json` and `dq-example-http` are still to come.
+
+To be removed in the restructure (not done yet; these modules still exist and work): `onboarding-application`, `partner-quality` (its IBAN/VAT code can
 come back as CEL functions), duplicate detection and the ADRs that describe them.
 
-**Monorepo now, split later.** Today everything lives in one repository: library, adapters, example
+**Monorepo now, split later** ✅ (in place). Today everything lives in one repository: library, adapters, example
 host, build logic and docs. This speeds up the initial implementation. A change that crosses modules
 is one commit and one review, the build is shared, and nothing has to be released before another
 module can use it. Splitting is worth considering once **churn makes the repository hard to work in
@@ -326,7 +405,7 @@ The code is built so that the split costs little:
 - **A published, semantically versioned library** (§17) is the contract between the repositories once
   they are split.
 
-**Development environment: Nix.** I chose a Nix flake (with direnv) for two reasons:
+**Development environment: Nix** ✅. I chose a Nix flake (with direnv) for two reasons:
 - **Reproducibility:** `flake.lock` pins the exact JDK 21, Gradle and tool versions. Every developer
   machine and CI run uses the same toolchain.
 - **Easy setup:** `direnv allow` or `nix develop` is the only step. You don't install a JDK or Gradle by
@@ -336,7 +415,7 @@ The Gradle wrapper and the foojay toolchain resolver stay in place, so the proje
 Nix. Nix covers only the development and CI toolchain. Runtime packaging uses Dockerfiles, Helm and
 Terraform (§18).
 
-HTTP example (Spring Boot, decided): `POST /api/v1/validations` with a JSON array of records and optional `category` and
+HTTP example (Spring Boot, decided; not built yet): `POST /api/v1/validations` with a JSON array of records and optional `category` and
 `country` query parameters. It returns `{ summary, results[], errors[] }`. With
 `Accept: application/x-ndjson` it streams outcomes line by line, so large batches use the same
 streaming path.
@@ -344,25 +423,25 @@ streaming path.
 ## 9. Open questions
 
 Decided so far:
-- the repo is restructured (§8);
-- rule logic is written in CEL (§3);
+- the repo is restructured (§8): new modules added ✅, old ones not removed yet;
+- rule logic is written in CEL (§3) ✅;
 - the HTTP example uses Spring Boot (§8);
-- an unmapped value falls back to `REVIEW` (A-1);
-- evaluation is sequential, with an optional host `Executor` (§5);
-- country scope is always on, and wide rules need care (§5);
-- skips are reported according to the explain level (§5);
-- provenance keeps raw values, with a masking hook (§7).
+- an unmapped value falls back to `REVIEW` (A-1) ✅;
+- evaluation is sequential ✅, with an optional host `Executor` (§5);
+- country scope is always on, and wide rules need care (§5) ✅;
+- skips are reported according to the explain level (§5) ✅;
+- provenance keeps raw values ✅, with a masking hook (§7).
 
 Each remaining question lists my suggestion first.
 
 - **Q-B — Can a catalog bring its own CEL functions?** *Suggestion:* yes, through a ServiceLoader
   `CelFunctionLibrary`, but only from Java on the host's classpath, never from the catalog file.
 - **Q-C — Where do CEL and Jackson live?** *Suggestion:* each in its own adapter module (§8), so core
-  stays at zero dependencies.
+  stays at zero dependencies. ✅ Done this way for CEL.
 - **Q-F — Should a run that selects no rules (e.g. status filter `DRAFT`) be an error?** *Suggestion:*
-  no. The summary reports `rulesSelected = 0`.
+  no. The summary reports `rulesSelected = 0`. ✅ Built this way.
 - **Q-H — What identifies a record?** *Suggestion:* the id when present, plus the position in the
-  input, which is always there. A missing id is not a failure.
+  input, which is always there. A missing id is not a failure. ✅ Built this way.
 - **Q-I — Should the rule version be in provenance?** *Suggestion:* store the catalog version (and the
   rule version if present) in every result.
 - **Q-K — Which API-test tool is primary, Bruno or SoapUI?** *Suggestion:* Bruno (§21). It is git-friendly
@@ -380,26 +459,27 @@ id. The code marks the exact place with `// ASSUMPTION(A-n): …` and a test nam
 
 | Id | Assumption | Why it is open | Where in code | Status |
 |---|---|---|---|---|
-| **A-1** | A computed value that has no entry in the decision mapping, in a rule with no explicit `default`, maps to **`REVIEW`**. | The domain model says every mapping has a `default`, yet the fixture rules `vatFormat` and `ibanFormat` define none. `REVIEW` sends an unexpected value to a human instead of silently passing or failing it. Alternatives: report a `RuleError`, or reject the catalog. | `DecisionMapping` (fallback default), `RuleCatalog` loader | ⏳ **TODO: confirm with architects / BA** |
-| **A-2** | A rule that didn't apply to a record is reported, at explain level `SKIPS` or higher, as a separate `RuleSkipped` event. It is never a `NOT_APPLICABLE` result. | The task makes `NOT_APPLICABLE` a decision. Reporting skips as results would change F4 counts depending on configuration. | engine loop, `ResultSink.onSkipped` | ⏳ **TODO: confirm with architects / BA** |
-| **A-3** | A record with no country, or an unknown country such as `ZZ`, gets only `WORLD` rules. | The task defines matching only for a record that has a valid country. | rule plan lookup | ⏳ **TODO: confirm with architects / BA** |
+| **A-1** | A computed value that has no entry in the decision mapping, in a rule with no explicit `default`, maps to **`REVIEW`**. | The domain model says every mapping has a `default`, yet the fixture rules `vatFormat` and `ibanFormat` define none. `REVIEW` sends an unexpected value to a human instead of silently passing or failing it. Alternatives: report a `RuleError`, or reject the catalog. | `DecisionMapping` (fallback default), `RuleCatalog` loader | ✅ implemented · ⏳ **TODO: confirm with architects / BA** |
+| **A-2** | A rule that didn't apply to a record is reported, at explain level `SKIPS` or higher, as a separate `RuleSkipped` event. It is never a `NOT_APPLICABLE` result. | The task makes `NOT_APPLICABLE` a decision. Reporting skips as results would change F4 counts depending on configuration. | engine loop, `ResultSink.onSkipped` | ✅ implemented · ⏳ **TODO: confirm with architects / BA** |
+| **A-3** | A record with no country, or an unknown country such as `ZZ`, gets only `WORLD` rules. | The task defines matching only for a record that has a valid country. | rule plan lookup | ✅ implemented · ⏳ **TODO: confirm with architects / BA** |
 
 The A-1 fallback is one constant (`DecisionMapping.IMPLICIT_DEFAULT`), so changing the answer is a
 one-line change plus the test `A1_unmappedValueWithoutDefaultIsReview`.
 
-## 11. Testing (planned)
+## 11. Testing
 
-- **Fixture scenario:** a table-driven test of the 3 records × 3 rules from the task, with exact
-  decisions and provenance.
-- **Fault isolation:** a rule that reads a field absent from one record without a guard, and one
-  malformed record. The run completes, the other results are present, and errors point to the cause.
-- **Unit tests:** decision mapping (hit, explicit default, A-1 implicit default), filters (composition,
+- ✅ **Fixture scenario:** a table-driven test of the 3 records × 3 rules from the task, with exact
+  decisions and provenance (`RequirementScenarioTest`, records read from the task's JSON).
+- ✅ **Fault isolation:** a rule that reads a field absent from one record without a guard, and one
+  malformed record. The run completes, the other results are present, and errors point to the cause
+  (`FaultIsolationTest`).
+- ✅ **Unit tests:** decision mapping (hit, explicit default, A-1 implicit default), filters (composition,
   RELEASED guard), country plan, CEL compilation errors, `present()` (missing, blank, wrong type),
   provenance field extraction.
-- **Scale:** 1M generated records under `-Xmx64m`, plus a JMH benchmark (next).
-- **Architecture:** an ArchUnit test that core depends on nothing but the JDK and JSpecify, and that
-  `internal` is not used from outside.
-- Run everything with `./gradlew test`.
+- **Scale:** 1M generated records on a 64 MB heap ✅ (`BoundedMemoryTest`), plus a JMH benchmark (next).
+- **Architecture:** an ArchUnit test that the engine core depends on nothing but the JDK and JSpecify
+  (planned; ArchUnit rules exist so far for the onboarding modules ✅).
+- ✅ Run everything with `./gradlew test`: 146 tests, with a summary line per module.
 
 ## 12. Trade-offs and what I'd do next
 
@@ -413,14 +493,16 @@ one-line change plus the test `A1_unmappedValueWithoutDefaultIsReview`.
   can't be interrupted safely in-process.
 - A run is not resumable. `onBatchEnd` gives the host what it needs to build checkpoints itself.
 
-**Next:** see Part II. The first items are a per-rule circuit breaker, CEL cost limits, and
-OpenTelemetry metrics and traces.
+**Next:**
+1. `dq-engine-json`, so rules can live in a catalog file.
+2. The rule engine's HTTP example.
+3. Then a per-rule circuit breaker, CEL cost limits, and the engine's `RunListener` (see Part II).
 
 ---
 
 # Part II — Evolution plan
 
-> Everything below is **planned, not built**. Iteration 1 is the core library; the later iterations
+> Everything below is **planned, not built**, except the items marked ✅. Iteration 1 is the core library; the later iterations
 > plug in through the seams in §7 and need no change to the core. The goal of this part is to show
 > the core doesn't block any of these directions.
 
@@ -428,15 +510,15 @@ OpenTelemetry metrics and traces.
 
 | Iteration | Scope | Outcome |
 |---|---|---|
-| **1: core (now)** | model, CEL logic, decision mapping, filters, streaming engine, fault isolation, summary, explain level, `RunListener` seam, JSON adapter, Spring Boot example, tests, the `verify` pipeline stage (§20) | the task's deliverables |
-| **2: operate it** | OpenTelemetry adapter, JFR events, Prometheus + Grafana stack (docker-compose), NDJSON event log, circuit breaker, CEL cost limits, full CI pipeline, Dockerfiles | you can see what rules cost and how they behave |
-| **3: trust it** | Kafka event log, catalog pipeline (lint, golden tests, shadow runs), catalog and API versioning checks, Helm charts, Terraform, release to Maven Central | rules and code ship safely and independently |
-| **4: scale it** | Spark / Flink / Kafka Streams runners, Temporal orchestration, result cache | billions of records, continuous validation |
+| **1: core (now)** | model ✅, CEL logic ✅, decision mapping ✅, filters ✅, streaming engine ✅, fault isolation ✅, summary ✅, explain level ✅ (`RESULTS`, `SKIPS`), tests ✅; still to do: `RunListener` seam, JSON adapter, Spring Boot example, the `verify` pipeline stage (§20) | the task's deliverables |
+| **2: operate it** | OpenTelemetry in the HTTP service ✅ (engine adapter still to do), JFR events, Prometheus + Grafana stack (docker-compose), NDJSON event log, circuit breaker, CEL cost limits, full CI pipeline, Dockerfiles | you can see what rules cost and how they behave |
+| **3: trust it** | event log on a message broker (e.g. Kafka), catalog pipeline (lint, golden tests, shadow runs), catalog and API versioning checks, Helm charts, Terraform, release to Maven Central | rules and code ship safely and independently |
+| **4: scale it** | 🔍 investigate distributed platforms (Kafka Streams, Spark, Flink, Temporal, Airflow; §16), result cache | billions of records, continuous validation |
 | **5: open it** | rule admin panel, steward review inbox, n8n / LangChain4j / MCP integrations | business users and other tools can work with rules |
 
 ## 14. Observability and rule profiling (iteration 2)
 
-**Already in place (in the HTTP host, `onboarding-server`, ADR-0011):**
+**Already in place ✅ (in the HTTP host, `onboarding-server`, ADR-0011):**
 - Micrometer with the OpenTelemetry bridge, and W3C trace propagation;
 - trace and span ids in the logs;
 - OTLP/HTTP export of traces and metrics with the `otel` profile;
@@ -452,12 +534,36 @@ host configures the SDK and exporters, and core stays dependency-free.
 |---|---|---|
 | Traces | one span per run, one child span per batch, per-record spans **only when sampled** or at `TRACE` | a span per rule × record would be 30M spans for 1M records × 30 rules. Never do that by default. |
 | Metrics | records processed, results by decision and severity, errors by kind and rule, skips, batch duration, `dq.rule.evaluation.duration` histogram per `rule.id` | label cardinality: `rule.id` is bounded by catalog size. **Never** use a record id as a label. |
-| Logs | run start and end with summary, catalog load problems, circuit-breaker trips. The host logs through SLF4J with Log4j2, and the `json-logs` profile writes Logstash JSON to stdout (ADR-0009); the core library has no logging dependency | no field values unless masked |
+| Logs | run start and end with summary, catalog load problems, circuit-breaker trips. The host already logs through SLF4J with Log4j2, and the `json-logs` profile writes Logstash JSON to stdout ✅ (ADR-0009); the core library has no logging dependency ✅ | no field values unless masked |
+
+```mermaid
+flowchart LR
+    srv["✅ onboarding-server<br/>Micrometer + OpenTelemetry bridge"]
+    eng["dq-engine RunListener<br/>run, batch and rule events"]
+    col["OpenTelemetry Collector"]
+    prom["Prometheus"]
+    tempo["Tempo or Jaeger"]
+    ship["Filebeat or Fluent Bit"]
+    logs["Loki or Logstash"]
+    graf["Grafana"]
+    eng -.-> srv
+    srv -- "✅ OTLP/HTTP, otel profile" --> col
+    prom -- "✅ scrape /actuator/prometheus" --> srv
+    srv -- "✅ stdout, Logstash JSON" --> ship
+    col --> tempo
+    col --> prom
+    ship --> logs
+    tempo --> graf
+    prom --> graf
+    logs --> graf
+```
+
+✅ = in place on the application side. The collector, backends and dashboards are planned.
 
 **Stack:** OTel SDK → OTel Collector → **Prometheus** (metrics), **Tempo or Jaeger** (traces),
-**Loki** (logs and event log) → **Grafana** dashboards and alerts. The Spring Boot example uses
-Micrometer with the OTel bridge and exposes `/actuator/prometheus`. A `docker-compose` file starts the
-whole stack locally.
+**Loki** (logs and event log) → **Grafana** dashboards and alerts. The HTTP service already uses
+Micrometer with the OTel bridge and exposes `/actuator/prometheus` ✅. A `docker-compose` file will start
+the whole stack locally.
 
 **Dashboards and alerts:**
 - run overview: throughput, duration, error rate;
@@ -491,17 +597,23 @@ changes.
 | Events | `RunStarted` (run id, catalog version, options, host), `ResultEmitted`, `RuleFailed`, `RuleSkipped` (by explain level), `BatchCompleted`, `RunCompleted` (summary) |
 | Envelope | [CloudEvents](https://cloudevents.io) style: `id`, `type`, `schemaVersion`, `runId`, `time`, `data` |
 | Idempotency | deterministic id = hash(runId, record position, ruleId), so retried batches deduplicate downstream |
-| Transport | iteration 2: NDJSON file sink. Iteration 3: **Kafka** topic keyed by record id (ordered per record), with a schema registry. |
-| Storage / query | Kafka retention plus a compacted "latest decision per record × rule" topic, then columnar storage (Parquet on object storage, or ClickHouse) for analytics |
+| Transport | iteration 2: NDJSON file sink. Iteration 3: a message-broker topic keyed by record id (ordered per record), with a schema registry. Kafka is one option (🔍 §16). |
+| Storage / query | broker retention plus a compacted "latest decision per record × rule" topic, then columnar storage (Parquet on object storage, or ClickHouse) for analytics |
 | Privacy | `ValueMasker` runs before writing. Retention period agreed with data protection. |
 
 ## 16. Scaling out: distributed processing and caching (iteration 4)
 
-The engine is a pure function of (catalog version, record). That is what makes it easy to embed in
-distributed platforms. **The library stays a library**: each platform gets a thin runner module, and
-the core doesn't change.
+> 🔍 **Proposals to investigate, not decisions.** The platforms below are options to keep in mind and to
+> investigate *if* a concrete need appears: volumes beyond one JVM, continuous instead of batch validation,
+> long-running orchestration, or a human review step. None is chosen. None is needed for the current
+> requirement either: a single JVM already streams 1M records in bounded memory (`BoundedMemoryTest` ✅).
+> Whether to incorporate one is decided only after a proof of concept, and recorded as an ADR.
 
-| Platform | Fits for | How the engine plugs in |
+The engine is a pure function of (catalog version, record). That is what would make it easy to embed in a
+distributed platform. **The library stays a library**: a platform would get a thin runner module, and the
+core wouldn't change.
+
+| Proposal 🔍 | Could fit for | How the engine could plug in |
 |---|---|---|
 | **Kafka / Kafka Streams** | continuous validation of partner changes | `mapValues` → outcomes topic. Kafka transactions give exactly-once delivery. |
 | **Apache Flink** | streaming with state, catalog hot reload | build the engine in `open()`. Push catalog updates to all tasks with the *broadcast state* pattern. |
@@ -509,14 +621,26 @@ the core doesn't change.
 | **Temporal** | durable orchestration of long runs, and the human `REVIEW` step | a workflow splits the input into chunks and an activity runs the engine on each chunk, with retries and checkpoints (via `onBatchEnd`). A `REVIEW` decision starts a steward workflow that waits for a human signal. |
 | **Airflow** | scheduling batch runs as DAGs (nightly re-validation) | a task that calls the batch host. Only worth it if the organisation already runs Airflow. |
 
-**Recommendation:** Kafka for change streams, Spark for bulk re-validation, Temporal for
-orchestration and the human review loop. Add Flink only if streaming needs state across records,
-which today's rules don't.
+**How to decide, if a need appears:**
+1. State the need in numbers: records per run or second, latency, duration, any human step.
+2. Check what the organisation already runs and can operate.
+3. Run a proof of concept with the task's fixture and the 1M-record generator, and measure.
+4. Record the result, including the options rejected, as an ADR.
 
-**What this requires from iteration 1 (already in the design):** no static state; no threads
-started by the library; a catalog that is plain text plus a version, so it can be shipped to workers
-(compiled CEL programs aren't serializable, so each worker compiles and caches them); deterministic
-results, so retries are safe.
+First questions per proposal:
+- **Kafka Streams:** is there a stream of partner changes?
+- **Spark:** are volumes really beyond a few JVMs?
+- **Flink:** does any rule need state across records? (Today's rules don't.)
+- **Temporal:** are runs long enough to need durable orchestration, or is a human `REVIEW` workflow in
+  scope?
+- **Airflow:** does the organisation already use it? A Kubernetes `CronJob` may be enough.
+
+**What any of these would require from iteration 1:**
+- no static state ✅;
+- no threads started by the library ✅;
+- deterministic results, so retries are safe ✅;
+- a catalog that is plain text plus a version, so it can be shipped to workers (planned with the catalog
+  loader). Compiled CEL programs aren't serializable, so each worker would compile and cache them.
 
 **Caching:**
 - *Compiled catalog cache:* compile once per catalog hash, per JVM. This matters most on Spark and
@@ -534,7 +658,7 @@ results, so retries are safe.
 | **Catalog format** | `apiVersion: dq/v1` at the top of the file (as in Kubernetes). The loader reads the current and previous version. |
 | **Rules** | each rule has a version, and a released catalog is immutable. Every result carries `catalogVersion`, `ruleId` and `ruleVersion`. Keep the catalog in Git ("rules as code"), so a PR review is the `DRAFT → RELEASED` gate. |
 | **CEL functions** | part of the catalog contract: never change what an existing function means. Add a new name instead. |
-| **HTTP API** | major version in the URI (`/api/v1`); additive changes only within a major. The OpenAPI spec is the contract, checked with `openapi-diff` in CI. `Deprecation` and `Sunset` headers before a removal. |
+| **HTTP API** | major version in the URI (`/api/v1`) ✅ (onboarding API); additive changes only within a major. The OpenAPI spec is the contract, checked with `openapi-diff` in CI. `Deprecation` and `Sunset` headers before a removal. |
 | **Events** | `schemaVersion` in the envelope; schema registry with backward compatibility; upcasters for old events on replay |
 | **Persistence (results store, if added)** | Flyway migrations; *expand → migrate → contract* for zero-downtime changes; never change the meaning of an existing column |
 
@@ -542,7 +666,7 @@ results, so retries are safe.
 
 **Code pipeline:** defined independently of the CI tool, with its stages, tools, commands and
 security tests, in §20. A release happens on a git tag: the semantic version comes from the tag,
-artifacts are signed and published to Maven Central, jars are reproducible (already configured), and a
+artifacts are signed and published to Maven Central, jars are reproducible (already configured ✅), and a
 changelog is written.
 
 **Catalog pipeline:** rules are data, so they ship **independently of code**:
@@ -561,12 +685,12 @@ changelog is written.
 | **Dockerfiles** | one per deployable host (HTTP example, batch worker): a multi-stage build (JDK build stage, then a slim JRE runtime image), running as a non-root user | 2 |
 | **docker-compose** | local stack: the example service plus Prometheus, Grafana, Tempo and Loki (§14) | 2 |
 | **Helm charts** | Kubernetes deployment of the hosts: Deployment/Service for the HTTP API, `Job`/`CronJob` for batch and scheduled runs, probes, resources, config, the catalog as a ConfigMap | 3 |
-| **Terraform** | the infrastructure underneath: Kubernetes cluster, container registry, Kafka, storage for the event log, observability backends, per environment (dev, staging, prod) | 3 |
+| **Terraform** | the infrastructure underneath: Kubernetes cluster, container registry, a message broker if one is chosen, storage for the event log, observability backends, per environment (dev, staging, prod) | 3 |
 
 **Runtime:** the HTTP example runs on Kubernetes, deployed with its Helm chart. Liveness and readiness
-probes come from Actuator, configuration from the environment, and the catalog from a ConfigMap or a
-catalog service. Batch and scheduled hosts run as Kubernetes `Job` / `CronJob`, or under Temporal
-(§16).
+probes come from Actuator (already exposed ✅), configuration from the environment, and the catalog from a ConfigMap or a
+catalog service. Batch and scheduled hosts run as Kubernetes `Job` / `CronJob`, or under a workflow engine if one is
+adopted (🔍 §16).
 
 ## 19. Tooling around the engine (iteration 5)
 
@@ -582,14 +706,14 @@ catalog service. Batch and scheduled hosts run as Kubernetes `Job` / `CronJob`, 
   "decision mapping". Worth evaluating before building a custom editor.
 
 **Steward inbox (CRM-like):** `REVIEW` results go into a work queue where a data steward accepts or
-corrects the record, driven by the Temporal workflow from §16.
+corrects the record. It could be driven by a workflow engine; Temporal is one proposal (🔍 §16).
 
 **Rule dependencies / DAGs:** today's rules are independent (the requirement says "purely from the
 record's own fields"). If a dependency appears ("run B only if A is `VALID`"), model it as an explicit
 DAG in the catalog and evaluate in topological order, with a DAG view in the admin panel. Do this
 **only when a real requirement appears**: dependencies remove the independence that makes rules
-parallel and cacheable. Orchestration DAGs (which runs execute when) belong in Temporal or Airflow,
-not in the engine.
+parallel and cacheable. Orchestration DAGs (which runs execute when) belong in a scheduler or workflow
+engine (e.g. Airflow or Temporal, 🔍 §16), not in the engine.
 
 **Integrations:**
 - **n8n:** the HTTP API works as-is through the HTTP node. A small community node ("Validate business
@@ -605,7 +729,7 @@ not in the engine.
 
 ## 20. Security testing and a tool-agnostic pipeline (iterations 1–3)
 
-> Planned, not built. Today the build already gives: compilation with `-Xlint:all -Werror` for
+> Planned, not built. ✅ Today the build already gives: compilation with `-Xlint:all -Werror` for
 > libraries, javadoc lint, unit, integration and architecture tests (ArchUnit), JUnit XML reports, a
 > per-module test summary, and reproducible jars.
 
@@ -651,7 +775,7 @@ nix develop -c ci/verify.sh        # same toolchain as on a laptop: versions pin
 | **Mutation testing** | tests that pass without checking anything | **PIT** (Gradle plugin) on `dq-engine` and `dq-engine-cel` | `./gradlew pitest` | deep |
 | **Coverage** | untested code | **JaCoCo** with a minimum per module (start: 80% lines on libraries) | `./gradlew jacocoTestCoverageVerification` | verify |
 | **API compatibility** | breaking changes for library consumers or HTTP clients | **japicmp** (Java API), **openapi-diff** (HTTP API) | against the last release | verify (on library and API changes) |
-| **Performance** | throughput regressions, memory growth | **JMH** benchmarks, the 1M-record bounded-memory test, **Gatling** or **k6** for HTTP | against a stored baseline | deep |
+| **Performance** | throughput regressions, memory growth | **JMH** benchmarks, the 1M-record bounded-memory test (✅ already part of `test`), **Gatling** or **k6** for HTTP | against a stored baseline | deep |
 | **Signing and provenance** | unverifiable artifacts | **Sigstore cosign** (images, jars), SLSA provenance attestation | at release | release |
 
 `DAST` and `Schemathesis` run against the HTTP example. Today that is `onboarding-server`; later it will
@@ -665,7 +789,7 @@ scanned without any pipeline change.
 | **verify** | `ci/verify.sh` | every push and merge request | ≤ 10 min | build with `-Werror`, all tests, ArchUnit, Error Prone, SpotBugs/FindSecBugs, Semgrep, gitleaks, dependency verification, coverage gate, japicmp / openapi-diff when relevant |
 | **security** | `ci/security.sh` | every merge request + nightly | ≤ 10 min | SBOM, OSV-Scanner, licence check |
 | **package** | `ci/package.sh` | main branch, tags | ≤ 10 min | jars, SBOM, Dockerfile lint, image build, Trivy image scan, IaC scan, push to the registry (with a commit-SHA tag) |
-| **api** | `ci/api.sh` | main branch + nightly | ≤ 10 min | start the image with docker-compose, run the Bruno collection and the SoapUI suite (§21), JUnit XML, tear down |
+| **api** | `ci/api.sh` | main branch + nightly | ≤ 10 min | start the image with docker-compose, run the Bruno collection and the SoapUI suite (§21, suites ✅ exist), JUnit XML, tear down |
 | **dast** | `ci/dast.sh` | main branch + nightly | ≤ 20 min | start the image with docker-compose, ZAP API scan, Schemathesis, tear down |
 | **deep** | `ci/deep.sh` | nightly / weekly | ≤ 60 min | PIT, Jazzer fuzzing, JMH and the scale tests, OWASP Dependency-Check, full Trivy re-scan of released images (new CVEs appear after release) |
 | **release** | `ci/release.sh` | version tag | ≤ 15 min | all of verify + security + package, sign (cosign), provenance, publish artifacts and SBOM, changelog |
@@ -755,7 +879,7 @@ Where a runner can't install Nix, the same toolchain comes from a CI image built
 
 ## 21. API and end-to-end testing: next steps
 
-**Today** ([`api-tests/`](api-tests)) the running onboarding API has three levels of manual or functional tests:
+**Today** ✅ ([`api-tests/`](api-tests)) the running onboarding API has three levels of manual or functional tests:
 
 | Level | What |
 |---|---|

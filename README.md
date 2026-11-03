@@ -81,25 +81,34 @@ JUnit 5 · AssertJ · Mockito · ArchUnit · JSpecify · springdoc-openapi · SL
 
 ## Onboarding service modules
 
-```
-┌──────────────────────────── onboarding-server (Spring Boot) ─────────────────────────────┐
-│  adapter/in/web                      config                     adapter/out/persistence  │
-│  BusinessPartnerController ──┐   OnboardingConfiguration    ┌── InMemoryPartnerRepository│
-│  (driving adapter)           │   (composition root)         │   adapter/out/event        │
-│                              │                              ├── SpringEventPublisherAdapter
-│   ┌──────────────────────────▼─── onboarding-application ───┴──────────────────────────┐ │
-│   │  port/in   OnboardPartnerUseCase · CheckPartnerUseCase · FindPartnersQuery         │ │
-│   │  service   OnboardingService  implements port/in, uses port/out                    │ │
-│   │  port/out  LoadPartnerPort · SavePartnerPort · PublishPartnerEventPort             │ │
-│   │  domain    BusinessPartner · PartnerId · BusinessPartnerOnboarded                  │ │
-│   │                         │ uses                                                     │ │
-│   │   ┌─────────────────────▼────── partner-quality (library) ───────────────────┐     │ │
-│   │   │ validation  DataQualityEngine · DataQualityRule · BuiltInRules            │     │ │
-│   │   │ matching    DuplicateDetector · Match<T> · MatchingPolicy                 │     │ │
-│   │   │ (root)      PartnerData · Address        internal/ (hidden by module-info)│     │ │
-│   │   └───────────────────────────────────────────────────────────────────────────┘     │ │
-│   └─────────────────────────────────────────────────────────────────────────────────────┘ │
-└───────────────────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph server["onboarding-server · Spring Boot"]
+        web["adapter/in/web<br/>BusinessPartnerController<br/>driving adapter"]
+        cfg["config<br/>OnboardingConfiguration<br/>composition root"]
+        persistence["adapter/out/persistence<br/>InMemoryPartnerRepository"]
+        events["adapter/out/event<br/>SpringEventPublisherAdapter"]
+    end
+    subgraph hexagon["onboarding-application · hexagon"]
+        portin["port/in<br/>OnboardPartnerUseCase · CheckPartnerUseCase · FindPartnersQuery"]
+        service["service<br/>OnboardingService"]
+        portout["port/out<br/>LoadPartnerPort · SavePartnerPort · PublishPartnerEventPort"]
+        domain["domain<br/>BusinessPartner · PartnerId · BusinessPartnerOnboarded"]
+    end
+    subgraph library["partner-quality · library"]
+        validation["validation<br/>DataQualityEngine · DataQualityRule · BuiltInRules"]
+        matching["matching<br/>DuplicateDetector · Match#lt;T#gt; · MatchingPolicy"]
+        rootpkg["root package<br/>PartnerData · Address<br/>internal/ hidden by module-info"]
+    end
+    web -->|calls| portin
+    service -.->|implements| portin
+    service -->|uses| portout
+    persistence -.->|implements| portout
+    events -.->|implements| portout
+    cfg -->|wires| service
+    service --> domain
+    service -->|uses| validation
+    service -->|uses| matching
 ```
 
 | Module | What | Depends on | Framework? | Published? |
