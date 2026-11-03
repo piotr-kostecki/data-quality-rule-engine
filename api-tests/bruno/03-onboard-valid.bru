@@ -1,0 +1,42 @@
+meta {
+  name: 03 Onboard a valid partner
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v1/business-partners
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "name": "{{partnerName}}",
+    "address": {"street": "ul. Testowa 3", "postalCode": "30-003", "city": "Kraków", "country": "PL"}
+  }
+}
+
+script:pre-request {
+  // A fresh, unrelated name per run, so a re-run is not a duplicate of the previous one
+  bru.setVar("partnerName", "bruno-" + Date.now().toString(36) + Math.random().toString(36).slice(2));
+}
+
+script:post-response {
+  bru.setVar("partnerId", res.body.partner && res.body.partner.id);
+}
+
+assert {
+  res.status: eq 201
+  res.body.partner.address.country: eq PL
+}
+
+tests {
+  test("stores the partner with the given name", function () {
+    expect(res.body.partner.name).to.equal(bru.getVar("partnerName"));
+  });
+
+  test("Location header points to the new partner", function () {
+    expect(res.getHeader("location")).to.match(new RegExp("/api/v1/business-partners/" + res.body.partner.id + "$"));
+  });
+}

@@ -1,0 +1,26 @@
+meta {
+  name: 09 List by country contains the partner
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/api/v1/business-partners?country=pl
+  body: none
+  auth: none
+}
+
+params:query {
+  country: pl
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("country filter is case-insensitive and includes the new partner", function () {
+    expect(res.body.map(p => p.name)).to.include(bru.getVar("partnerName"));
+    expect(res.body.every(p => p.address.country === "PL")).to.equal(true);
+  });
+}

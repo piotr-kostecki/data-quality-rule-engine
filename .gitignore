@@ -59,3 +59,7 @@ replay_pid*.log
 # OS
 .DS_Store
 Thumbs.db
+
+# API test runs (SoapUI testrunner, Bruno CLI reports, Bruno local secrets)
+api-tests/**/build/
+api-tests/bruno/.env

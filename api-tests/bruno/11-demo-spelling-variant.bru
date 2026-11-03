@@ -1,0 +1,31 @@
+meta {
+  name: 11 (demo) A spelling variant of a demo partner is a duplicate
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{baseUrl}}/api/v1/business-partners/checks
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "name": "ACME Chemicals G.m.b.H.",
+    "address": {"street": "Industriestr. 1", "postalCode": "10115", "city": "Berlin", "country": "DE"}
+  }
+}
+
+script:pre-request {
+  if (String(bru.getEnvVar("demoData")) !== "true") {
+    bru.runner.skipRequest();
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.onboardable: eq false
+  res.body.duplicates[0].name: eq Acme Chemicals GmbH
+  res.body.duplicates[0].reason: eq SIMILAR_NAME_AND_LOCATION
+}

@@ -5,9 +5,9 @@
 > confirmation from architects or BAs are tracked in [§10](#10-assumptions-to-confirm). Answers
 > will be folded back into the main text before submission.
 >
-> **Part I (§1–12)** describes the core library being built now. **Part II (§13–20)** is the
-> evolution plan: observability, event log, scaling out, versioning, CI/CD, tooling, and security
-> testing with a tool-agnostic pipeline. It is
+> **Part I (§1–12)** describes the core library being built now. **Part II (§13–21)** is the
+> evolution plan: observability, event log, scaling out, versioning, CI/CD, tooling, security
+> testing with a tool-agnostic pipeline, and API / end-to-end testing. It is
 > planned only and not implemented.
 
 This document describes a reusable Java library that validates business-partner records against a
@@ -365,6 +365,8 @@ Each remaining question lists my suggestion first.
   input, which is always there. A missing id is not a failure.
 - **Q-I — Should the rule version be in provenance?** *Suggestion:* store the catalog version (and the
   rule version if present) in every result.
+- **Q-K — Which API-test tool is primary, Bruno or SoapUI?** *Suggestion:* Bruno (§21). It is git-friendly
+  and its CLI is free. Keep SoapUI only if the people who consume the API use it.
 - **Q-J — What package or group name should the code use?** The code currently uses `com.example.dq.*`,
   matching the existing modules. *Suggestion:* a neutral namespace such as
   `io.github.<you>.dq`.
@@ -655,6 +657,7 @@ scanned without any pipeline change.
 | **verify** | `ci/verify.sh` | every push and merge request | ≤ 10 min | build with `-Werror`, all tests, ArchUnit, Error Prone, SpotBugs/FindSecBugs, Semgrep, gitleaks, dependency verification, coverage gate, japicmp / openapi-diff when relevant |
 | **security** | `ci/security.sh` | every merge request + nightly | ≤ 10 min | SBOM, OSV-Scanner, licence check |
 | **package** | `ci/package.sh` | main branch, tags | ≤ 10 min | jars, SBOM, Dockerfile lint, image build, Trivy image scan, IaC scan, push to the registry (with a commit-SHA tag) |
+| **api** | `ci/api.sh` | main branch + nightly | ≤ 10 min | start the image with docker-compose, run the Bruno collection and the SoapUI suite (§21), JUnit XML, tear down |
 | **dast** | `ci/dast.sh` | main branch + nightly | ≤ 20 min | start the image with docker-compose, ZAP API scan, Schemathesis, tear down |
 | **deep** | `ci/deep.sh` | nightly / weekly | ≤ 60 min | PIT, Jazzer fuzzing, JMH and the scale tests, OWASP Dependency-Check, full Trivy re-scan of released images (new CVEs appear after release) |
 | **release** | `ci/release.sh` | version tag | ≤ 15 min | all of verify + security + package, sign (cosign), provenance, publish artifacts and SBOM, changelog |
@@ -741,3 +744,30 @@ Where a runner can't install Nix, the same toolchain comes from a CI image built
    with Hadolint and a Trivy image scan; the first DAST run (ZAP baseline + Schemathesis).
 3. **Iteration 3:** japicmp and openapi-diff gates, IaC scans with the Helm charts and Terraform, the deep
    stage (PIT, Jazzer, JMH), signing and provenance at release.
+
+## 21. API and end-to-end testing: next steps
+
+**Today** ([`api-tests/`](api-tests)) the running onboarding API has three levels of manual or functional tests:
+
+| Level | What |
+|---|---|
+| Manual | [`http/requests.http`](http/requests.http), for IntelliJ / VS Code |
+| SoapUI | `api-tests/soapui`: one suite with 9 steps and 24 assertions covering the happy path and the error contract (`201`/`422`/`404`/`400`, problem details, `Location`). Passed with the SoapUI 5.10.0 test runner. |
+| Bruno | `api-tests/bruno`: the same flow plus two checks that need demo data, in plain-text files. Environments `local-dev`, `local-default` and `local-dev-8081` match the server's Spring profiles. Expectations were checked with `curl`; a run with the Bruno CLI is still to be done. |
+
+Both suites are repeatable: each run onboards its own partner with a random name, and checks that need demo
+data are skipped when an environment has none.
+
+**Next steps**
+
+| # | Step | Why | Notes |
+|---|---|---|---|
+| 1 | **Choose one primary API-test tool** | two suites for the same flow mean double maintenance | Suggestion: **Bruno**. Its text files diff and review well in git, it has a free CLI, and environments are files. Keep SoapUI only if the teams or customers who consume the API already use it (Q-K). |
+| 2 | **Run the suite in the pipeline** (`api` stage, §20) | catch broken contracts before deployment | Start the image with docker-compose, run `bru run --env ci --reporter-junit …` and/or `testrunner.sh -j`, publish JUnit XML. Pin the tool versions (both are packaged in nixpkgs for Linux runners). |
+| 3 | **Add a `ci` and a `staging` environment** | run the same suite against deployed environments | URLs and credentials come from the CI secret store (`{{process.env.X}}` in Bruno, `-P` in SoapUI) and are never committed |
+| 4 | **Tests for the rule engine's HTTP host** | the requirement's scenario must hold end to end, not only in unit tests | Once `dq-example-http` exists: post the task's 3 records and check the 3 × 3 decision table, the provenance, the fault-isolation case, the summary counts, and NDJSON streaming for a large batch |
+| 5 | **Contract tests** | stop the API and its clients from drifting apart | Consumer-driven contracts (Pact or Spring Cloud Contract) for known clients; `openapi-diff` in CI for the published document (§20) |
+| 6 | **Negative and robustness cases** | most production incidents come from unexpected input | Oversized payloads, wrong content types, Unicode and diacritics, very long strings, unknown fields; overlaps with Schemathesis and ZAP (§20) |
+| 7 | **Performance smoke** | spot throughput regressions early | A short k6 or Gatling scenario on `/checks` and, later, `/validations`, compared against a stored baseline |
+| 8 | **Traceability** | show which requirement is covered where | A table mapping F1–F6 and the acceptance criteria to unit tests, API tests and DAST checks, kept next to the tests |
+| 9 | **Test data** | stable, isolated runs | A fresh container per pipeline run instead of shared state; demo data only through the `demo` profile; no reset endpoints in the API |

@@ -1,0 +1,8 @@
+docs {
+  # Partner Onboarding API
+
+  Functional smoke tests for `onboarding-server`. Run them in order (the requests are numbered):
+  request 03 onboards a partner with a random name and later requests use its id, so the collection is
+  repeatable against the same server. Requests marked "demo" need the demo data and are skipped when
+  the environment sets `demoData: false`.
+}

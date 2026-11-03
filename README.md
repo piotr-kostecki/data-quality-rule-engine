@@ -37,7 +37,8 @@ curl -s -X POST localhost:8080/api/v1/business-partners/checks -H 'Content-Type:
 ```
 
 Then open **http://localhost:8080/swagger-ui.html** to explore the API in the browser. Ready-made
-requests are also in [http/requests.http](http/requests.http).
+requests are in [http/requests.http](http/requests.http), and functional test suites for SoapUI and Bruno are in
+[api-tests/](api-tests/README.md).
 
 **4. Stop it** with `Ctrl+C`.
 
@@ -335,6 +336,8 @@ run everything again.
   view) · [`onboarding-application`](onboarding-application/README.md) (hexagon, ports, use cases) ·
   [`onboarding-server`](onboarding-server/README.md) (adapters, API, configuration, logging) ·
   [`build-logic`](build-logic/README.md) (convention plugins).
+- **[api-tests/](api-tests/README.md)**: SoapUI and Bruno suites for the running API, with Bruno environments per
+  Spring profile.
 - **[DESIGN.md](DESIGN.md)**: design of the data-quality rule engine for
   [raw/REQUIREMENT.md](raw/REQUIREMENT.md).
 - **[docs/DEV_ENVIRONMENT.md](docs/DEV_ENVIRONMENT.md)**: Nix dev shell, editor setup and formatting.

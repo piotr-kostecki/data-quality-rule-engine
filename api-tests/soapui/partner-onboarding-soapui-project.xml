@@ -1,0 +1,245 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SoapUI (open source, 5.x) functional smoke tests for the onboarding REST API (onboarding-server).
+  Self-contained and repeatable: each run onboards its own partner with a random name, so it works
+  against a server with or without demo data, and can be run again against the same server.
+  Target server: project property baseUrl (default http://localhost:8080), override with -PbaseUrl=...
+  See ../README.md for how to run it.
+-->
+<con:soapui-project name="Partner Onboarding API" resourceRoot="" soapui-version="5.10.0" abortOnError="false" runType="SEQUENTIAL" activeEnvironment="Default" xmlns:con="http://eviware.com/soapui/config">
+  <con:settings/>
+  <con:interface xsi:type="con:RestService" wadlVersion="http://wadl.dev.java.net/2009/02" name="Partner Onboarding API" type="rest" basePath="" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <con:settings/>
+    <con:definitionCache type="TEXT"/>
+    <con:endpoints><con:endpoint>${#Project#baseUrl}</con:endpoint></con:endpoints>
+    <con:resource name="health" path="/actuator/health">
+      <con:settings/>
+      <con:parameters/>
+      <con:method name="Get health" method="GET">
+        <con:settings/>
+        <con:parameters/>
+        <con:representation type="RESPONSE"><con:mediaType>application/json</con:mediaType><con:params/><con:element xsi:nil="true"/><con:description xsi:nil="true"/></con:representation>
+      </con:method>
+    </con:resource>
+    <con:resource name="api-docs" path="/v3/api-docs">
+      <con:settings/>
+      <con:parameters/>
+      <con:method name="Get OpenAPI document" method="GET">
+        <con:settings/>
+        <con:parameters/>
+        <con:representation type="RESPONSE"><con:mediaType>application/json</con:mediaType><con:params/><con:element xsi:nil="true"/><con:description xsi:nil="true"/></con:representation>
+      </con:method>
+    </con:resource>
+    <con:resource name="business-partners" path="/api/v1/business-partners">
+      <con:settings/>
+      <con:parameters/>
+      <con:method name="Onboard partner" method="POST">
+        <con:settings/>
+        <con:parameters/>
+        <con:representation type="RESPONSE"><con:mediaType>application/json</con:mediaType><con:params/><con:element xsi:nil="true"/><con:description xsi:nil="true"/></con:representation>
+      </con:method>
+      <con:method name="List partners" method="GET">
+        <con:settings/>
+        <con:parameters>
+          <con:parameter><con:name>country</con:name><con:value xsi:nil="true"/><con:style>QUERY</con:style><con:default xsi:nil="true"/></con:parameter>
+        </con:parameters>
+        <con:representation type="RESPONSE"><con:mediaType>application/json</con:mediaType><con:params/><con:element xsi:nil="true"/><con:description xsi:nil="true"/></con:representation>
+      </con:method>
+    </con:resource>
+    <con:resource name="business-partner" path="/api/v1/business-partners/{id}">
+      <con:settings/>
+      <con:parameters>
+        <con:parameter><con:name>id</con:name><con:value xsi:nil="true"/><con:style>TEMPLATE</con:style><con:default xsi:nil="true"/></con:parameter>
+      </con:parameters>
+      <con:method name="Get partner" method="GET">
+        <con:settings/>
+        <con:parameters/>
+        <con:representation type="RESPONSE"><con:mediaType>application/json</con:mediaType><con:params/><con:element xsi:nil="true"/><con:description xsi:nil="true"/></con:representation>
+      </con:method>
+    </con:resource>
+    <con:resource name="checks" path="/api/v1/business-partners/checks">
+      <con:settings/>
+      <con:parameters/>
+      <con:method name="Check partner" method="POST">
+        <con:settings/>
+        <con:parameters/>
+        <con:representation type="RESPONSE"><con:mediaType>application/json</con:mediaType><con:params/><con:element xsi:nil="true"/><con:description xsi:nil="true"/></con:representation>
+      </con:method>
+    </con:resource>
+  </con:interface>
+  <con:testSuite name="Onboarding API smoke">
+    <con:settings/>
+    <con:runType>SEQUENTIAL</con:runType>
+    <con:testCase failOnError="true" failTestCaseOnErrors="true" keepSession="false" maxResults="0" name="Onboard, read, check and reject" searchProperties="true" id="2392d815-1c63-476b-b8fe-417115d869a8">
+      <con:description>Happy path and error contract of the onboarding API, in one repeatable sequence.</con:description>
+      <con:settings/>
+      <con:setupScript>// A fresh, unrelated name per run, so a re-run is not a duplicate of the previous one
+testCase.setPropertyValue('partnerName', UUID.randomUUID().toString())</con:setupScript>
+      <con:testStep type="restrequest" name="Health is UP">
+        <con:settings/>
+        <con:config service="Partner Onboarding API" resourcePath="/actuator/health" methodName="Get health" xsi:type="con:RestRequestStep" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+          <con:restRequest name="Health is UP" mediaType="application/json">
+            <con:settings/>
+            <con:endpoint>${#Project#baseUrl}</con:endpoint>
+            <con:request/>
+            <con:assertion type="Valid HTTP Status Codes" name="HTTP 200"><con:configuration><codes>200</codes></con:configuration></con:assertion><con:assertion type="JsonPath Match" name="$.status = UP"><con:configuration><path>$.status</path><content>UP</content><allowWildcards>false</allowWildcards><ignoreNamspaceDifferences>false</ignoreNamspaceDifferences><ignoreComments>false</ignoreComments></con:configuration></con:assertion>
+            <con:credentials><con:authType>No Authorization</con:authType></con:credentials>
+            <con:jmsConfig JMSDeliveryMode="PERSISTENT"/>
+            <con:jmsPropertyConfig/>
+            <con:parameters/>
+          </con:restRequest>
+        </con:config>
+      </con:testStep>
+      <con:testStep type="restrequest" name="OpenAPI document lists the API">
+        <con:settings/>
+        <con:config service="Partner Onboarding API" resourcePath="/v3/api-docs" methodName="Get OpenAPI document" xsi:type="con:RestRequestStep" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+          <con:restRequest name="OpenAPI document lists the API" mediaType="application/json">
+            <con:settings/>
+            <con:endpoint>${#Project#baseUrl}</con:endpoint>
+            <con:request/>
+            <con:assertion type="Valid HTTP Status Codes" name="HTTP 200"><con:configuration><codes>200</codes></con:configuration></con:assertion><con:assertion type="Simple Contains" name="contains /api/v1/business-partners"><con:configuration><token>/api/v1/business-partners</token><ignoreCase>false</ignoreCase><useRegEx>false</useRegEx></con:configuration></con:assertion>
+            <con:credentials><con:authType>No Authorization</con:authType></con:credentials>
+            <con:jmsConfig JMSDeliveryMode="PERSISTENT"/>
+            <con:jmsPropertyConfig/>
+            <con:parameters/>
+          </con:restRequest>
+        </con:config>
+      </con:testStep>
+      <con:testStep type="restrequest" name="Onboard a valid partner">
+        <con:settings/>
+        <con:config service="Partner Onboarding API" resourcePath="/api/v1/business-partners" methodName="Onboard partner" xsi:type="con:RestRequestStep" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+          <con:restRequest name="Onboard a valid partner" mediaType="application/json" postQueryString="false">
+            <con:settings/>
+            <con:endpoint>${#Project#baseUrl}</con:endpoint>
+            <con:request><![CDATA[{
+  "name": "${#TestCase#partnerName}",
+  "address": {"street": "ul. Testowa 3", "postalCode": "30-003", "city": "Kraków", "country": "PL"}
+}]]></con:request>
+            <con:assertion type="Valid HTTP Status Codes" name="HTTP 201"><con:configuration><codes>201</codes></con:configuration></con:assertion><con:assertion type="JsonPath Match" name="$.partner.name = ${#TestCase#partnerName}"><con:configuration><path>$.partner.name</path><content>${#TestCase#partnerName}</content><allowWildcards>false</allowWildcards><ignoreNamspaceDifferences>false</ignoreNamspaceDifferences><ignoreComments>false</ignoreComments></con:configuration></con:assertion><con:assertion type="JsonPath Match" name="$.partner.address.country = PL"><con:configuration><path>$.partner.address.country</path><content>PL</content><allowWildcards>false</allowWildcards><ignoreNamspaceDifferences>false</ignoreNamspaceDifferences><ignoreComments>false</ignoreComments></con:configuration></con:assertion><con:assertion type="GroovyScriptAssertion" name="Location header points to the new partner"><con:configuration><scriptText>def json = new groovy.json.JsonSlurper().parseText(messageExchange.responseContent)
+def location = messageExchange.responseHeaders[&#x27;Location&#x27;]?.get(0)
+assert location != null
+assert location.endsWith(&#x27;/api/v1/business-partners/&#x27; + json.partner.id)
+context.testCase.setPropertyValue(&#x27;partnerId&#x27;, json.partner.id)</scriptText></con:configuration></con:assertion>
+            <con:credentials><con:authType>No Authorization</con:authType></con:credentials>
+            <con:jmsConfig JMSDeliveryMode="PERSISTENT"/>
+            <con:jmsPropertyConfig/>
+            <con:parameters/>
+          </con:restRequest>
+        </con:config>
+      </con:testStep>
+      <con:testStep type="restrequest" name="Get the partner by id">
+        <con:settings/>
+        <con:config service="Partner Onboarding API" resourcePath="/api/v1/business-partners/{id}" methodName="Get partner" xsi:type="con:RestRequestStep" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+          <con:restRequest name="Get the partner by id" mediaType="application/json">
+            <con:settings/>
+            <con:endpoint>${#Project#baseUrl}</con:endpoint>
+            <con:request/>
+            <con:assertion type="Valid HTTP Status Codes" name="HTTP 200"><con:configuration><codes>200</codes></con:configuration></con:assertion><con:assertion type="JsonPath Match" name="$.id = ${#TestCase#partnerId}"><con:configuration><path>$.id</path><content>${#TestCase#partnerId}</content><allowWildcards>false</allowWildcards><ignoreNamspaceDifferences>false</ignoreNamspaceDifferences><ignoreComments>false</ignoreComments></con:configuration></con:assertion><con:assertion type="JsonPath Match" name="$.name = ${#TestCase#partnerName}"><con:configuration><path>$.name</path><content>${#TestCase#partnerName}</content><allowWildcards>false</allowWildcards><ignoreNamspaceDifferences>false</ignoreNamspaceDifferences><ignoreComments>false</ignoreComments></con:configuration></con:assertion>
+            <con:credentials><con:authType>No Authorization</con:authType></con:credentials>
+            <con:jmsConfig JMSDeliveryMode="PERSISTENT"/>
+            <con:jmsPropertyConfig/>
+            <con:parameters><con:entry key="id" value="${#TestCase#partnerId}"/></con:parameters>
+          </con:restRequest>
+        </con:config>
+      </con:testStep>
+      <con:testStep type="restrequest" name="Dry run finds the partner as a duplicate">
+        <con:settings/>
+        <con:config service="Partner Onboarding API" resourcePath="/api/v1/business-partners/checks" methodName="Check partner" xsi:type="con:RestRequestStep" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+          <con:restRequest name="Dry run finds the partner as a duplicate" mediaType="application/json" postQueryString="false">
+            <con:settings/>
+            <con:endpoint>${#Project#baseUrl}</con:endpoint>
+            <con:request><![CDATA[{
+  "name": "${#TestCase#partnerName}",
+  "address": {"street": "ul. Testowa 3", "postalCode": "30-003", "city": "Kraków", "country": "PL"}
+}]]></con:request>
+            <con:assertion type="Valid HTTP Status Codes" name="HTTP 200"><con:configuration><codes>200</codes></con:configuration></con:assertion><con:assertion type="JsonPath Match" name="$.onboardable = false"><con:configuration><path>$.onboardable</path><content>false</content><allowWildcards>false</allowWildcards><ignoreNamspaceDifferences>false</ignoreNamspaceDifferences><ignoreComments>false</ignoreComments></con:configuration></con:assertion><con:assertion type="JsonPath Match" name="$.duplicates[0].partnerId = ${#TestCase#partnerId}"><con:configuration><path>$.duplicates[0].partnerId</path><content>${#TestCase#partnerId}</content><allowWildcards>false</allowWildcards><ignoreNamspaceDifferences>false</ignoreNamspaceDifferences><ignoreComments>false</ignoreComments></con:configuration></con:assertion>
+            <con:credentials><con:authType>No Authorization</con:authType></con:credentials>
+            <con:jmsConfig JMSDeliveryMode="PERSISTENT"/>
+            <con:jmsPropertyConfig/>
+            <con:parameters/>
+          </con:restRequest>
+        </con:config>
+      </con:testStep>
+      <con:testStep type="restrequest" name="Invalid data is rejected with all problems">
+        <con:settings/>
+        <con:config service="Partner Onboarding API" resourcePath="/api/v1/business-partners" methodName="Onboard partner" xsi:type="con:RestRequestStep" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+          <con:restRequest name="Invalid data is rejected with all problems" mediaType="application/json" postQueryString="false">
+            <con:settings/>
+            <con:endpoint>${#Project#baseUrl}</con:endpoint>
+            <con:request><![CDATA[{
+  "name": "Broken Corp",
+  "address": {"city": "Berlin", "postalCode": "1234", "country": "DE"},
+  "vatId": "DE136695977", "iban": "CH9300762011623852957"
+}]]></con:request>
+            <con:assertion type="Valid HTTP Status Codes" name="HTTP 422"><con:configuration><codes>422</codes></con:configuration></con:assertion><con:assertion type="Simple Contains" name="contains POSTAL_CODE_FORMAT"><con:configuration><token>POSTAL_CODE_FORMAT</token><ignoreCase>false</ignoreCase><useRegEx>false</useRegEx></con:configuration></con:assertion><con:assertion type="Simple Contains" name="contains VAT_ID"><con:configuration><token>VAT_ID</token><ignoreCase>false</ignoreCase><useRegEx>false</useRegEx></con:configuration></con:assertion><con:assertion type="JsonPath Match" name="$.status = 422"><con:configuration><path>$.status</path><content>422</content><allowWildcards>false</allowWildcards><ignoreNamspaceDifferences>false</ignoreNamspaceDifferences><ignoreComments>false</ignoreComments></con:configuration></con:assertion>
+            <con:credentials><con:authType>No Authorization</con:authType></con:credentials>
+            <con:jmsConfig JMSDeliveryMode="PERSISTENT"/>
+            <con:jmsPropertyConfig/>
+            <con:parameters/>
+          </con:restRequest>
+        </con:config>
+      </con:testStep>
+      <con:testStep type="restrequest" name="Unknown id is 404 problem">
+        <con:settings/>
+        <con:config service="Partner Onboarding API" resourcePath="/api/v1/business-partners/{id}" methodName="Get partner" xsi:type="con:RestRequestStep" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+          <con:restRequest name="Unknown id is 404 problem" mediaType="application/json">
+            <con:settings/>
+            <con:endpoint>${#Project#baseUrl}</con:endpoint>
+            <con:request/>
+            <con:assertion type="Valid HTTP Status Codes" name="HTTP 404"><con:configuration><codes>404</codes></con:configuration></con:assertion><con:assertion type="JsonPath Match" name="$.status = 404"><con:configuration><path>$.status</path><content>404</content><allowWildcards>false</allowWildcards><ignoreNamspaceDifferences>false</ignoreNamspaceDifferences><ignoreComments>false</ignoreComments></con:configuration></con:assertion>
+            <con:credentials><con:authType>No Authorization</con:authType></con:credentials>
+            <con:jmsConfig JMSDeliveryMode="PERSISTENT"/>
+            <con:jmsPropertyConfig/>
+            <con:parameters><con:entry key="id" value="00000000-0000-0000-0000-000000000000"/></con:parameters>
+          </con:restRequest>
+        </con:config>
+      </con:testStep>
+      <con:testStep type="restrequest" name="Malformed JSON is 400 problem">
+        <con:settings/>
+        <con:config service="Partner Onboarding API" resourcePath="/api/v1/business-partners" methodName="Onboard partner" xsi:type="con:RestRequestStep" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+          <con:restRequest name="Malformed JSON is 400 problem" mediaType="application/json" postQueryString="false">
+            <con:settings/>
+            <con:endpoint>${#Project#baseUrl}</con:endpoint>
+            <con:request><![CDATA[{"name": ]]></con:request>
+            <con:assertion type="Valid HTTP Status Codes" name="HTTP 400"><con:configuration><codes>400</codes></con:configuration></con:assertion><con:assertion type="JsonPath Match" name="$.status = 400"><con:configuration><path>$.status</path><content>400</content><allowWildcards>false</allowWildcards><ignoreNamspaceDifferences>false</ignoreNamspaceDifferences><ignoreComments>false</ignoreComments></con:configuration></con:assertion>
+            <con:credentials><con:authType>No Authorization</con:authType></con:credentials>
+            <con:jmsConfig JMSDeliveryMode="PERSISTENT"/>
+            <con:jmsPropertyConfig/>
+            <con:parameters/>
+          </con:restRequest>
+        </con:config>
+      </con:testStep>
+      <con:testStep type="restrequest" name="List by country contains the partner">
+        <con:settings/>
+        <con:config service="Partner Onboarding API" resourcePath="/api/v1/business-partners" methodName="List partners" xsi:type="con:RestRequestStep" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+          <con:restRequest name="List by country contains the partner" mediaType="application/json">
+            <con:settings/>
+            <con:endpoint>${#Project#baseUrl}</con:endpoint>
+            <con:request/>
+            <con:assertion type="Valid HTTP Status Codes" name="HTTP 200"><con:configuration><codes>200</codes></con:configuration></con:assertion><con:assertion type="Simple Contains" name="contains ${#TestCase#partnerName}"><con:configuration><token>${#TestCase#partnerName}</token><ignoreCase>false</ignoreCase><useRegEx>false</useRegEx></con:configuration></con:assertion>
+            <con:credentials><con:authType>No Authorization</con:authType></con:credentials>
+            <con:jmsConfig JMSDeliveryMode="PERSISTENT"/>
+            <con:jmsPropertyConfig/>
+            <con:parameters><con:entry key="country" value="pl"/></con:parameters>
+          </con:restRequest>
+        </con:config>
+      </con:testStep>
+      <con:properties>
+        <con:property><con:name>partnerName</con:name><con:value/></con:property>
+        <con:property><con:name>partnerId</con:name><con:value/></con:property>
+      </con:properties>
+      <con:reportParameters/>
+    </con:testCase>
+    <con:properties/>
+    <con:reportParameters/>
+  </con:testSuite>
+  <con:requirements/>
+  <con:properties>
+    <con:property><con:name>baseUrl</con:name><con:value>http://localhost:8080</con:value></con:property>
+  </con:properties>
+  <con:wssContainer/>
+  <con:databaseConnectionContainer/>
+  <con:oAuth2ProfileContainer/>
+  <con:reporting><con:xmlTemplates/><con:parameters/></con:reporting>
+  <con:sensitiveInformation/>
+</con:soapui-project>

@@ -1,0 +1,22 @@
+meta {
+  name: 02 OpenAPI document lists the API
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/v3/api-docs
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("documents the business-partner endpoints", function () {
+    expect(res.body.paths).to.have.property("/api/v1/business-partners");
+    expect(res.body.paths).to.have.property("/api/v1/business-partners/checks");
+  });
+}

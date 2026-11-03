@@ -1,0 +1,22 @@
+meta {
+  name: 04 Get the partner by id
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/v1/business-partners/{{partnerId}}
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.id: eq {{partnerId}}
+}
+
+tests {
+  test("returns the onboarded partner", function () {
+    expect(res.body.name).to.equal(bru.getVar("partnerName"));
+  });
+}

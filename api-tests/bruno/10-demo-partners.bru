@@ -1,0 +1,28 @@
+meta {
+  name: 10 (demo) The three demo partners are seeded
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/api/v1/business-partners
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  if (String(bru.getEnvVar("demoData")) !== "true") {
+    bru.runner.skipRequest();
+  }
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("one demo partner per country", function () {
+    const names = res.body.map(p => p.name);
+    expect(names).to.include.members(["Acme Chemicals GmbH", "Przykład Logistyka sp. z o.o.", "Alpen Präzision AG"]);
+  });
+}

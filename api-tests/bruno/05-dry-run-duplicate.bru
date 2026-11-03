@@ -1,0 +1,24 @@
+meta {
+  name: 05 Dry run finds the partner as a duplicate
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/v1/business-partners/checks
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "name": "{{partnerName}}",
+    "address": {"street": "ul. Testowa 3", "postalCode": "30-003", "city": "Kraków", "country": "PL"}
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.onboardable: eq false
+  res.body.duplicates[0].partnerId: eq {{partnerId}}
+}

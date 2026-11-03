@@ -1,0 +1,36 @@
+meta {
+  name: 06 Invalid data is rejected with all problems
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/v1/business-partners
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "name": "Broken Corp",
+    "address": {"city": "Berlin", "postalCode": "1234", "country": "DE"},
+    "vatId": "DE136695977",
+    "iban": "CH9300762011623852957"
+  }
+}
+
+assert {
+  res.status: eq 422
+  res.body.status: eq 422
+}
+
+tests {
+  test("lists every failed rule, not only the first", function () {
+    const ruleIds = res.body.violations.map(v => v.ruleId);
+    expect(ruleIds).to.include.members(["POSTAL_CODE_FORMAT", "VAT_ID"]);
+  });
+
+  test("answers with RFC 9457 problem details", function () {
+    expect(res.getHeader("content-type")).to.contain("application/problem+json");
+  });
+}
