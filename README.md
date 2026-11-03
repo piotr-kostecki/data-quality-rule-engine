@@ -7,6 +7,52 @@ identifiers).
 Requirements for the data-quality rule engine are in [raw/REQUIREMENT.md](raw/REQUIREMENT.md), and
 its design is in [DESIGN.md](DESIGN.md).
 
+## Quickstart: run the server
+
+The runnable server is the business-partner onboarding service (`onboarding-server`). It starts with three
+demo partners (DE, PL, CH), so the requests below work straight away.
+
+**1. Get the toolchain.** Either way works:
+- [Nix](https://nixos.org/download) with direnv: run `direnv allow` once in the repo. Without direnv, run
+  `nix develop`. This gives JDK 21 and Gradle.
+- Or any JDK 17–24 on `PATH`. Gradle and JDK 21 are downloaded automatically.
+
+**2. Start it** (first start downloads dependencies; then it's up in a few seconds):
+
+```bash
+./gradlew :onboarding-server:bootRun                                          # inside the Nix shell (dev profile is set)
+./gradlew :onboarding-server:bootRun --args='--spring.profiles.active=dev'    # without Nix
+```
+
+**3. Check it's up and try it:**
+
+```bash
+curl -s localhost:8080/actuator/health                    # {"status":"UP",...}
+curl -s localhost:8080/api/v1/business-partners           # the 3 demo partners
+
+# a spelling variant of a demo partner is recognised as a duplicate
+curl -s -X POST localhost:8080/api/v1/business-partners/checks -H 'Content-Type: application/json' -d '{
+  "name": "ACME Chemicals G.m.b.H.",
+  "address": {"street": "Industriestr. 1", "postalCode": "10115", "city": "Berlin", "country": "DE"}}'
+```
+
+Then open **http://localhost:8080/swagger-ui.html** to explore the API in the browser. Ready-made
+requests are also in [http/requests.http](http/requests.http).
+
+**4. Stop it** with `Ctrl+C`.
+
+**Variants:**
+
+| Want to… | Run |
+|---|---|
+| run the packaged jar | `./gradlew :onboarding-server:bootJar && java -jar onboarding-server/build/libs/onboarding-server-0.1.0-SNAPSHOT.jar --spring.profiles.active=dev` |
+| use another port | add `--server.port=8081` (jar), or `--args='--server.port=8081'` (bootRun) |
+| start without demo data | run without a profile. The Nix shell exports `SPRING_PROFILES_ACTIVE=dev`, so clear it there: `SPRING_PROFILES_ACTIVE= ./gradlew :onboarding-server:bootRun` |
+| get JSON logs (Logstash format) | profiles `dev,json-logs` |
+
+Profiles, logging and the full API are described further down. The rule engine from
+[raw/REQUIREMENT.md](raw/REQUIREMENT.md) is a library for now and has no HTTP server of its own yet (see below).
+
 ## Data-quality rule engine (first slice)
 
 The rule engine from the requirement is being built in two new modules, next to the onboarding service:
@@ -82,7 +128,7 @@ Dependencies only point inward, and two mechanisms enforce that:
 `OnboardingService` implements the in-ports and is created only in `config.OnboardingConfiguration`. The
 controller receives it through the port interfaces and never sees the class.
 
-## Quick start
+## Development setup
 
 **Why Nix:** the development environment is defined in a Nix flake for two reasons.
 - **Reproducibility:** `flake.lock` pins the exact JDK 21, Gradle and tool versions, so every machine
