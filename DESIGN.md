@@ -5,8 +5,9 @@
 > confirmation from architects or BAs are tracked in [§10](#10-assumptions-to-confirm). Answers
 > will be folded back into the main text before submission.
 >
-> **Part I (§1–12)** describes the core library being built now. **Part II (§13–19)** is the
-> evolution plan: observability, event log, scaling out, versioning, CI/CD and tooling. It is
+> **Part I (§1–12)** describes the core library being built now. **Part II (§13–20)** is the
+> evolution plan: observability, event log, scaling out, versioning, CI/CD, tooling, and security
+> testing with a tool-agnostic pipeline. It is
 > planned only and not implemented.
 
 This document describes a reusable Java library that validates business-partner records against a
@@ -425,7 +426,7 @@ OpenTelemetry metrics and traces.
 
 | Iteration | Scope | Outcome |
 |---|---|---|
-| **1: core (now)** | model, CEL logic, decision mapping, filters, streaming engine, fault isolation, summary, explain level, `RunListener` seam, JSON adapter, Spring Boot example, tests, minimal GitHub Actions build | the task's deliverables |
+| **1: core (now)** | model, CEL logic, decision mapping, filters, streaming engine, fault isolation, summary, explain level, `RunListener` seam, JSON adapter, Spring Boot example, tests, the `verify` pipeline stage (§20) | the task's deliverables |
 | **2: operate it** | OpenTelemetry adapter, JFR events, Prometheus + Grafana stack (docker-compose), NDJSON event log, circuit breaker, CEL cost limits, full CI pipeline, Dockerfiles | you can see what rules cost and how they behave |
 | **3: trust it** | Kafka event log, catalog pipeline (lint, golden tests, shadow runs), catalog and API versioning checks, Helm charts, Terraform, release to Maven Central | rules and code ship safely and independently |
 | **4: scale it** | Spark / Flink / Kafka Streams runners, Temporal orchestration, result cache | billions of records, continuous validation |
@@ -529,14 +530,10 @@ results, so retries are safe.
 
 ## 18. Deployment and CI/CD (iterations 1–3)
 
-**Code pipeline (GitHub Actions):**
-1. On every PR (iteration 1): `./gradlew build` with `-Werror`, tests, javadoc and the ArchUnit test.
-2. Iteration 2: CodeQL, dependency review, CycloneDX SBOM, a container image built from a
-   Dockerfile and pushed to a registry.
-3. Iteration 3: japicmp and `openapi-diff` compatibility gates; nightly PIT mutation tests, JMH
-   benchmarks with a regression threshold, and the 1M-record memory test.
-4. Release on a git tag: semantic version from the tag; signed artifacts on Maven Central;
-   reproducible jars (already configured); changelog.
+**Code pipeline:** defined independently of the CI tool, with its stages, tools, commands and
+security tests, in §20. A release happens on a git tag: the semantic version comes from the tag,
+artifacts are signed and published to Maven Central, jars are reproducible (already configured), and a
+changelog is written.
 
 **Catalog pipeline:** rules are data, so they ship **independently of code**:
 1. Lint: every CEL expression compiles against the target library version, and decision names are
@@ -595,3 +592,152 @@ not in the engine.
   context.
 - **Guardrails:** the deterministic engine remains the only decision-maker. `ValueMasker` runs
   before any data leaves for an external model.
+
+## 20. Security testing and a tool-agnostic pipeline (iterations 1–3)
+
+> Planned, not built. Today the build already gives: compilation with `-Xlint:all -Werror` for
+> libraries, javadoc lint, unit, integration and architecture tests (ArchUnit), JUnit XML reports, a
+> per-module test summary, and reproducible jars.
+
+### Principle: the pipeline lives in the repository, the CI tool only calls it
+
+We haven't chosen the CI tool yet (GitHub Actions, GitLab CI, Jenkins, Azure DevOps, …). So **every
+pipeline step is a command in this repository**:
+- Gradle tasks for everything on the JVM;
+- small scripts in `ci/` for everything else.
+
+Any CI job reduces to one line, and every step can be run locally in exactly the same way:
+
+```bash
+nix develop -c ci/verify.sh        # same toolchain as on a laptop: versions pinned by flake.lock
+```
+
+| Rule | Why |
+|---|---|
+| Steps are `ci/<stage>.sh` scripts calling Gradle and CLI tools, never logic written in CI-tool YAML | switching CI tools means rewriting a few one-line wrappers, not the pipeline |
+| Tool versions are pinned in `flake.nix` (or as container images pinned by digest when a tool isn't packaged) | the same results locally and in CI, and upgrades are reviewed changes |
+| Results use standard formats: **JUnit XML** (tests), **SARIF** (security findings), **CycloneDX** (SBOM), **JaCoCo XML** (coverage) | every CI tool and code-review platform can display them |
+| Reports go to `build/reports/<tool>/` | one folder to publish as CI artifacts |
+| A stage exits non-zero only on a *gate* violation (see the gate policy below) | blocking vs informational is decided in the repo, not in CI settings |
+
+### Security and quality tests
+
+| Kind | What it finds | Tool (open source) | How it runs | Stage |
+|---|---|---|---|---|
+| **Compile-time bug patterns** | null misuse, wrong `equals`, common Java mistakes | **Error Prone** (Gradle plugin) | part of `compileJava` | verify |
+| **SAST: Java bytecode** | injection, weak crypto, unsafe deserialization, path traversal | **SpotBugs + FindSecBugs** (Gradle plugin) | `./gradlew spotbugsMain` → SARIF | verify |
+| **SAST: source, multi-language** | OWASP Top 10 patterns in Java/Spring, YAML, Dockerfile, shell | **Semgrep** (`p/java`, `p/owasp-top-ten`, own rules in `config/semgrep/`) | `semgrep scan --sarif --error` | verify |
+| **Secrets** | committed keys, tokens, passwords, including in git history | **gitleaks** | `gitleaks detect --redact`; also as a pre-commit hook | verify |
+| **Supply chain: integrity** | tampered or unexpected dependency jars | Gradle **dependency verification** (`gradle/verification-metadata.xml`) and **dependency locking** | every Gradle build | verify |
+| **SCA: known vulnerabilities** | CVEs in dependencies (CEL brings Guava and protobuf) | **OSV-Scanner** on the lockfiles or SBOM; **OWASP Dependency-Check** as a second opinion | `osv-scanner --sbom build/reports/sbom/*.json` | security, nightly |
+| **SBOM** | inventory of every shipped component | **CycloneDX Gradle plugin** | `./gradlew cyclonedxBom` | security, release |
+| **Licences** | GPL or unknown licences in shipped artifacts | **dependency-license-report** (Gradle) with an allow-list | `./gradlew checkLicense` | security |
+| **Dockerfile lint** | root user, unpinned base images, bad layer practice | **Hadolint** | `hadolint Dockerfile` | package |
+| **Container image scan** | OS-package and JRE CVEs, misconfiguration | **Trivy** (`trivy image`) | after the image build | package, nightly |
+| **IaC scan** | insecure Helm/Kubernetes/Terraform settings | **kube-linter**, `helm lint`, **tflint**, **Checkov** or `trivy config` | on `deploy/` changes | package |
+| **DAST: API** | missing security headers, error leaks, injection, auth problems on the running service | **OWASP ZAP** API scan, driven by the OpenAPI document | against a disposable instance (docker-compose) | dast |
+| **API fuzzing / contract** | 5xx responses, schema violations, crashes on unexpected input | **Schemathesis** (property-based, from OpenAPI) | same disposable instance | dast |
+| **Library fuzzing** | crashes in parsing and evaluation (`DataRecord`, CEL compile/eval, JSON reader) | **Jazzer** (JUnit 5 fuzz tests), **jqwik** property-based tests | time-boxed, e.g. 10 min per target | deep |
+| **Mutation testing** | tests that pass without checking anything | **PIT** (Gradle plugin) on `dq-engine` and `dq-engine-cel` | `./gradlew pitest` | deep |
+| **Coverage** | untested code | **JaCoCo** with a minimum per module (start: 80% lines on libraries) | `./gradlew jacocoTestCoverageVerification` | verify |
+| **API compatibility** | breaking changes for library consumers or HTTP clients | **japicmp** (Java API), **openapi-diff** (HTTP API) | against the last release | verify (on library and API changes) |
+| **Performance** | throughput regressions, memory growth | **JMH** benchmarks, the 1M-record bounded-memory test, **Gatling** or **k6** for HTTP | against a stored baseline | deep |
+| **Signing and provenance** | unverifiable artifacts | **Sigstore cosign** (images, jars), SLSA provenance attestation | at release | release |
+
+`DAST` and `Schemathesis` run against the HTTP example. Today that is `onboarding-server`; later it will
+be the HTTP host of the rule engine. Both read the service's `/v3/api-docs`, so new endpoints are
+scanned without any pipeline change.
+
+### Stages and when they run
+
+| Stage | Script | Runs on | Time budget | Contents |
+|---|---|---|---|---|
+| **verify** | `ci/verify.sh` | every push and merge request | ≤ 10 min | build with `-Werror`, all tests, ArchUnit, Error Prone, SpotBugs/FindSecBugs, Semgrep, gitleaks, dependency verification, coverage gate, japicmp / openapi-diff when relevant |
+| **security** | `ci/security.sh` | every merge request + nightly | ≤ 10 min | SBOM, OSV-Scanner, licence check |
+| **package** | `ci/package.sh` | main branch, tags | ≤ 10 min | jars, SBOM, Dockerfile lint, image build, Trivy image scan, IaC scan, push to the registry (with a commit-SHA tag) |
+| **dast** | `ci/dast.sh` | main branch + nightly | ≤ 20 min | start the image with docker-compose, ZAP API scan, Schemathesis, tear down |
+| **deep** | `ci/deep.sh` | nightly / weekly | ≤ 60 min | PIT, Jazzer fuzzing, JMH and the scale tests, OWASP Dependency-Check, full Trivy re-scan of released images (new CVEs appear after release) |
+| **release** | `ci/release.sh` | version tag | ≤ 15 min | all of verify + security + package, sign (cosign), provenance, publish artifacts and SBOM, changelog |
+| **deploy** | `ci/deploy.sh <env>` | after release, per environment | — | `helm upgrade` dev → staging → prod; smoke test; DAST again against staging |
+
+### Gate policy
+
+| Finding | Merge request | Main / release |
+|---|---|---|
+| Test failure, compile warning in a library, coverage below minimum | **block** | **block** |
+| Secret detected | **block** | **block** (and rotate the secret) |
+| SAST / SCA / image / IaC finding: **critical or high** | **block** | **block** |
+| SAST / SCA finding: medium | report | report, with a ticket within one sprint |
+| Low / informational | report | report |
+| Breaking API change without a major version bump | **block** | **block** |
+| DAST high alert | — | **block** promotion to prod |
+| Mutation score, fuzzing crash, performance regression | — | report; a fuzzing crash becomes a regression test |
+
+**False positives and accepted risks** are suppressed **in the repository**, never in the CI tool:
+`config/security/` (SpotBugs exclude, Dependency-Check suppressions), `.semgrepignore`,
+`.gitleaksignore`, and `ci/dast/zap-rules.tsv`. Every suppression carries a reason and a review or
+expiry date, and is reviewed like code.
+
+### Planned repository layout
+
+```
+ci/
+  verify.sh  security.sh  package.sh  dast.sh  deep.sh  release.sh  deploy.sh
+  dast/
+    docker-compose.yml      # the service image + its dependencies, for DAST only
+    zap-rules.tsv           # ZAP rule decisions (IGNORE/WARN/FAIL) with reasons
+config/
+  security/                 # SpotBugs excludes, Dependency-Check suppressions
+  semgrep/                  # project-specific Semgrep rules
+build-logic/
+  onboarding.quality-conventions.gradle   # Error Prone, SpotBugs, JaCoCo, PIT, CycloneDX, licences
+deploy/
+  helm/  terraform/         # scanned by the IaC step
+```
+
+### Example stage scripts (sketch)
+
+```bash
+#!/usr/bin/env bash
+# ci/verify.sh: fast gate for every change
+set -euo pipefail
+./gradlew build spotbugsMain jacocoTestCoverageVerification --no-daemon
+gitleaks detect --no-banner --redact --report-format sarif --report-path build/reports/gitleaks.sarif
+semgrep scan --config p/java --config p/owasp-top-ten --config config/semgrep \
+  --sarif --output build/reports/semgrep.sarif --error --severity ERROR
+```
+
+```bash
+#!/usr/bin/env bash
+# ci/dast.sh: dynamic tests against a disposable instance
+set -euo pipefail
+trap 'docker compose -f ci/dast/docker-compose.yml down -v' EXIT
+docker compose -f ci/dast/docker-compose.yml up -d --wait
+mkdir -p build/reports/zap && cp ci/dast/zap-rules.tsv build/reports/zap/   # ZAP reads config from its work dir
+# --network host works on Linux CI runners; on Docker Desktop use host.docker.internal instead of localhost
+docker run --rm --network host -v "$PWD/build/reports/zap:/zap/wrk" zaproxy/zap-stable \
+  zap-api-scan.py -t http://localhost:8080/v3/api-docs -f openapi -c zap-rules.tsv -r zap.html -x zap.xml
+schemathesis run http://localhost:8080/v3/api-docs --checks all --junit-xml build/reports/schemathesis.xml
+```
+
+### The CI tool's part: one wrapper per stage
+
+The same stage in three CI tools. Only these few lines change when the tool changes:
+
+| CI tool | `verify` job |
+|---|---|
+| GitHub Actions | `- run: nix develop -c ci/verify.sh` (plus an upload of `build/reports/**/*.sarif`) |
+| GitLab CI | `verify: { script: [ "nix develop -c ci/verify.sh" ], artifacts: { reports: { junit: "**/build/test-results/test/*.xml" } } }` |
+| Jenkins | `stage('verify') { steps { sh 'nix develop -c ci/verify.sh' } post { always { junit '**/build/test-results/test/*.xml' } } }` |
+
+Where a runner can't install Nix, the same toolchain comes from a CI image built from the flake
+(`nix build .#ci-image`), so versions stay identical.
+
+### Order of introduction
+
+1. **Iteration 1:** `ci/verify.sh` with what exists today, plus gitleaks, dependency verification and a JaCoCo
+   report (gate set at the current level, then raised).
+2. **Iteration 2:** Error Prone, SpotBugs + FindSecBugs, Semgrep, SBOM, OSV-Scanner, licences; the Dockerfile
+   with Hadolint and a Trivy image scan; the first DAST run (ZAP baseline + Schemathesis).
+3. **Iteration 3:** japicmp and openapi-diff gates, IaC scans with the Helm charts and Terraform, the deep
+   stage (PIT, Jazzer, JMH), signing and provenance at release.
