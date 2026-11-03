@@ -1,0 +1,54 @@
+// Applied by modules that are published for other teams: stricter compilation, javadoc, sources,
+// reproducible jars and a Maven publication.
+plugins {
+    id 'onboarding.java-conventions'
+    id 'java-library'
+    id 'maven-publish'
+}
+
+java {
+    withSourcesJar()
+    withJavadocJar()
+}
+
+tasks.withType(JavaCompile).configureEach {
+    // A published library ships without warnings: every lint warning fails the build
+    options.compilerArgs.add('-Werror')
+}
+
+tasks.named('javadoc') {
+    // Check javadoc syntax and broken references, but do not demand a comment on every member
+    options.addBooleanOption('Xdoclint:all,-missing', true)
+}
+
+tasks.named('jar') {
+    manifest {
+        attributes(
+                'Implementation-Title': project.name,
+                'Implementation-Version': project.version)
+    }
+}
+
+// Same sources produce byte-identical jars: needed for build caching and supply-chain verification
+tasks.withType(AbstractArchiveTask).configureEach {
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}
+
+publishing {
+    publications {
+        library(MavenPublication) {
+            from components.java
+            pom {
+                name = project.name
+                description = project.description
+                licenses {
+                    license {
+                        name = 'Apache-2.0'
+                        url = 'https://www.apache.org/licenses/LICENSE-2.0'
+                    }
+                }
+            }
+        }
+    }
+}

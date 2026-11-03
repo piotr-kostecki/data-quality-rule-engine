@@ -1,0 +1,20 @@
+# Local development settings. Active automatically inside the Nix/direnv shell (SPRING_PROFILES_ACTIVE=dev);
+# outside it: ./gradlew :onboarding-server:bootRun --args='--spring.profiles.active=dev'
+
+logging:
+  level:
+    com.example.onboarding: DEBUG
+
+spring:
+  jackson:
+    serialization:
+      indent-output: true   # readable JSON in curl without piping through jq
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"        # env, beans, configprops, mappings, ... handy locally, never in production
+  endpoint:
+    health:
+      show-details: always

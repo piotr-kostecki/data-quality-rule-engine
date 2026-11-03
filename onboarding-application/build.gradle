@@ -1,0 +1,13 @@
+plugins {
+    id 'onboarding.java-conventions'
+    id 'java-library'
+}
+
+description = 'Onboarding hexagon: domain, ports (in/out) and use-case services. Framework-free.'
+
+dependencies {
+    // PartnerData, ValidationReport and Match appear in this module's port signatures, hence api
+    api project(':partner-quality')
+
+    testImplementation testFixtures(project(':partner-quality'))
+}

@@ -1,0 +1,24 @@
+plugins {
+    id 'onboarding.java-conventions'
+    alias(libs.plugins.spring.boot)
+}
+
+description = 'Spring Boot server: REST, persistence and event adapters around the onboarding hexagon'
+
+dependencies {
+    // Gradle-native BOM import instead of the io.spring.dependency-management plugin
+    implementation platform(libs.spring.boot.bom)
+
+    implementation project(':onboarding-application')
+    implementation libs.bundles.spring.web.server
+
+    testImplementation libs.spring.boot.starter.test
+    testImplementation libs.archunit.junit5
+    testImplementation testFixtures(project(':partner-quality'))
+}
+
+tasks.withType(Test).configureEach {
+    // The Nix dev shell exports SPRING_PROFILES_ACTIVE=dev for bootRun; tests must not inherit it
+    // (the dev profile seeds demo data, which would break assertions on an empty store).
+    environment.remove('SPRING_PROFILES_ACTIVE')
+}

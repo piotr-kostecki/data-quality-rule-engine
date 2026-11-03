@@ -1,0 +1,33 @@
+# Single source of truth for every external version used by the build.
+# Spring-managed libraries have no version here: the Spring Boot BOM (spring-boot-bom) provides it.
+
+[versions]
+java = "21"
+spring-boot = "3.5.16"
+springdoc = "2.8.17"
+jspecify = "1.0.0"
+# Kept equal to the versions managed by the Spring Boot BOM, so the library and the server test with the same JUnit.
+junit = "5.12.2"
+assertj = "3.27.7"
+archunit = "1.4.2"
+
+[libraries]
+jspecify = { module = "org.jspecify:jspecify", version.ref = "jspecify" }
+
+junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }
+archunit-junit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref = "archunit" }
+
+spring-boot-bom = { module = "org.springframework.boot:spring-boot-dependencies", version.ref = "spring-boot" }
+spring-boot-starter-web = { module = "org.springframework.boot:spring-boot-starter-web" }
+spring-boot-starter-actuator = { module = "org.springframework.boot:spring-boot-starter-actuator" }
+spring-boot-starter-test = { module = "org.springframework.boot:spring-boot-starter-test" }
+springdoc-openapi-webmvc-ui = { module = "org.springdoc:springdoc-openapi-starter-webmvc-ui", version.ref = "springdoc" }
+
+[bundles]
+spring-web-server = ["spring-boot-starter-web", "spring-boot-starter-actuator", "springdoc-openapi-webmvc-ui"]
+
+[plugins]
+spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }

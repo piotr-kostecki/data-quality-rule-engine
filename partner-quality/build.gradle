@@ -1,0 +1,12 @@
+plugins {
+    id 'onboarding.library-conventions'
+    // Publishes PartnerFixtures (valid VAT IDs, IBANs, sample partners) for consumers' tests
+    id 'java-test-fixtures'
+}
+
+description = 'Business-partner data quality rules and duplicate detection, without framework dependencies'
+
+dependencies {
+    // Null-safety annotations are part of the public API, so consumers need them too
+    api libs.jspecify
+}

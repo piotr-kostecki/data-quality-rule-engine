@@ -1,0 +1,24 @@
+spring:
+  application:
+    name: partner-onboarding
+  profiles:
+    group:
+      dev: demo   # the dev profile also seeds the demo partners (DemoDataLoader)
+  mvc:
+    problemdetails:
+      enabled: true   # framework errors (bad JSON, bad UUID, 404) also answer with RFC 9457 bodies
+
+onboarding:
+  matching:
+    candidate-threshold: 0.80   # report as "possible duplicate" from this score
+    blocking-threshold: 0.95    # refuse onboarding (409) from this score
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html

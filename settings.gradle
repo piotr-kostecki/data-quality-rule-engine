@@ -1,0 +1,24 @@
+pluginManagement {
+    // Convention plugins shared by all modules (build-logic/src/main/groovy/*.gradle)
+    includeBuild('build-logic')
+}
+
+plugins {
+    // Downloads a JDK 21 for compilation when the build runs outside the Nix dev shell
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+}
+
+dependencyResolutionManagement {
+    // Repositories are declared once, here; a module that declares its own fails the build
+    repositoriesMode = RepositoriesMode.FAIL_ON_PROJECT_REPOS
+    repositories {
+        mavenCentral()
+    }
+    // gradle/libs.versions.toml is picked up automatically as the "libs" catalog
+}
+
+rootProject.name = 'partner-onboarding'
+
+include 'partner-quality'          // reusable library: rules + duplicate detection, no framework
+include 'onboarding-application'   // hexagon: domain, ports, use-case services, no framework
+include 'onboarding-server'        // Spring Boot: adapters (web, persistence, events) + wiring

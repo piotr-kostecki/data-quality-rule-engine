@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!--
+  Java formatter profile for this project, used by jdtls (Neovim, VS Code) and importable into IntelliJ
+  ("Eclipse Code Formatter" plugin) or Eclipse. Settings not listed keep the Eclipse defaults.
+  Style: 4 spaces, 120 columns, continuation indent 8 spaces, hand-made line breaks are kept.
+-->
+<profiles version="23">
+    <profile kind="CodeFormatterProfile" name="project" version="23">
+        <setting id="org.eclipse.jdt.core.formatter.tabulation.char" value="space"/>
+        <setting id="org.eclipse.jdt.core.formatter.tabulation.size" value="4"/>
+        <setting id="org.eclipse.jdt.core.formatter.indentation.size" value="4"/>
+        <setting id="org.eclipse.jdt.core.formatter.continuation_indentation" value="2"/>
+        <setting id="org.eclipse.jdt.core.formatter.continuation_indentation_for_array_initializer" value="2"/>
+        <setting id="org.eclipse.jdt.core.formatter.lineSplit" value="120"/>
+        <setting id="org.eclipse.jdt.core.formatter.comment.line_length" value="120"/>
+        <setting id="org.eclipse.jdt.core.formatter.join_wrapped_lines" value="false"/>
+        <setting id="org.eclipse.jdt.core.formatter.join_lines_in_comments" value="false"/>
+        <setting id="org.eclipse.jdt.core.formatter.comment.format_line_comments" value="false"/>
+        <setting id="org.eclipse.jdt.core.formatter.blank_lines_to_preserve" value="1"/>
+        <setting id="org.eclipse.jdt.core.formatter.keep_empty_lines_in_blocks" value="true"/>
+        <setting id="org.eclipse.jdt.core.formatter.text_block_indentation" value="0"/>
+    </profile>
+</profiles>

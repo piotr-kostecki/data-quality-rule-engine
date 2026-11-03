@@ -1,0 +1,61 @@
+# Patterns that name a build-output directory are anchored (/name/ or /*/name/), so they never match a
+# source package with the same name, such as port/out or adapter/out.
+
+# Gradle
+.gradle/
+.gradle-home/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+*.class
+
+# Nix / direnv
+.direnv/
+result
+result-*
+.envrc.local
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+/out/
+/*/out/
+http-client.private.env.json
+
+# Eclipse / jdtls (VS Code Java, Neovim): generated project metadata and compiler output
+.project
+.classpath
+.settings/
+.factorypath
+/bin/
+/*/bin/
+
+# VS Code
+.vscode/
+
+# Vim / Neovim
+*.swp
+*.swo
+*~
+Session.vim
+.netrwhist
+/tags
+
+# JVM crash logs, heap dumps, flight recordings
+hs_err_pid*.log
+replay_pid*.log
+*.hprof
+*.jfr
+
+# Logs and local environment
+*.log
+.env
+.env.*
+
+# Claude Code: per-user settings
+.claude/settings.local.json
+
+# OS
+.DS_Store
+Thumbs.db

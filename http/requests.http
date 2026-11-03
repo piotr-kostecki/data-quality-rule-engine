@@ -1,0 +1,75 @@
+### Requests for IntelliJ HTTP Client or VS Code "REST Client".
+### Start the app first: ./gradlew bootRun inside the Nix shell (dev profile seeds demo data),
+### or ./gradlew bootRun --args='--spring.profiles.active=dev' outside it.
+
+@host = http://localhost:8080
+
+### 1. Dry run: spelling variant of the demo partner "Acme Chemicals GmbH" -> duplicate with score 1.0
+POST {{host}}/api/v1/business-partners/checks
+Content-Type: application/json
+
+{
+  "name": "ACME Chemicals G.m.b.H.",
+  "address": {"street": "Industriestr. 1", "postalCode": "10115", "city": "Berlin", "country": "DE"}
+}
+
+### 2. Onboard a new Polish company -> 201 Created (VAT ID is compacted to PL5261040828)
+POST {{host}}/api/v1/business-partners
+Content-Type: application/json
+
+{
+  "name": "Przykład Software sp. z o.o.",
+  "address": {"street": "ul. Testowa 2", "postalCode": "30-002", "city": "Kraków", "country": "PL"},
+  "vatId": "PL 526-104-08-28"
+}
+
+### 3a. Same name as a demo partner, same city, other postal code -> 409 (score 0.85*1.0 + 0.15*0.7 = 0.955)
+POST {{host}}/api/v1/business-partners
+Content-Type: application/json
+
+{
+  "name": "Przykład Logistyka S.A.",
+  "address": {"street": "ul. Inna 5", "postalCode": "31-002", "city": "Krakow", "country": "PL"}
+}
+
+### 3b. Same name in another city -> 201 created, but listed in possibleDuplicates (score 0.85)
+POST {{host}}/api/v1/business-partners
+Content-Type: application/json
+
+{
+  "name": "Przykład Logistyka S.A.",
+  "address": {"street": "ul. Głogowska 7", "postalCode": "60-001", "city": "Poznań", "country": "PL"}
+}
+
+### 4. Same VAT ID as a demo partner -> 409 Conflict (SAME_VAT_ID)
+POST {{host}}/api/v1/business-partners
+Content-Type: application/json
+
+{
+  "name": "Completely Different Name GmbH",
+  "address": {"street": "Hauptstraße 1", "postalCode": "10115", "city": "Berlin", "country": "DE"},
+  "vatId": "DE136695976"
+}
+
+### 5. Everything wrong -> 422 with all violations
+POST {{host}}/api/v1/business-partners
+Content-Type: application/json
+
+{
+  "name": "Broken Corp",
+  "address": {"city": "Berlin", "postalCode": "1234", "country": "DE"},
+  "vatId": "DE136695977",
+  "iban": "CH9300762011623852957"
+}
+
+### 6. List partners in Poland
+GET {{host}}/api/v1/business-partners?country=PL
+
+### 7. Unknown id -> 404 problem
+GET {{host}}/api/v1/business-partners/00000000-0000-0000-0000-000000000000
+
+### 8. Malformed JSON -> 400 problem
+POST {{host}}/api/v1/business-partners
+Content-Type: application/json
+
+{not json

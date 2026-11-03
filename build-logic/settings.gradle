@@ -1,0 +1,13 @@
+dependencyResolutionManagement {
+    repositories {
+        gradlePluginPortal()
+    }
+    // Share the main build's version catalog with the convention plugins
+    versionCatalogs {
+        libs {
+            from(files('../gradle/libs.versions.toml'))
+        }
+    }
+}
+
+rootProject.name = 'build-logic'
